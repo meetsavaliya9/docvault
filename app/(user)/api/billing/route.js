@@ -1,0 +1,24 @@
+import { NextResponse } from "next/server";
+import { getAuthenticatedUser } from "@/app/lib/auth/session";
+import { getBillingSummary } from "@/lib/billing";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const user = await getAuthenticatedUser();
+  if (!user) {
+    return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+
+  try {
+    return NextResponse.json(await getBillingSummary(user.id), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error("Failed to load subscription details:", error);
+    return NextResponse.json(
+      { error: "Could not load subscription details. Please try again." },
+      { status: 500 }
+    );
+  }
+}

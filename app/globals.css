@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -12,15 +12,100 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Smooth glass effect helper */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.admin-theme {
+  color: #0f172a;
+}
+
+@layer utilities {
+  .admin-theme .bg-slate-950 {
+    background-color: #f8fafc;
+  }
+
+  .admin-theme .bg-slate-950\/60 {
+    background-color: rgb(248 250 252 / 0.6);
+  }
+
+  .admin-theme .bg-slate-900 {
+    background-color: #fff;
+  }
+
+  .admin-theme .bg-slate-900\/80 {
+    background-color: rgb(255 255 255 / 0.8);
+  }
+
+  .admin-theme .bg-slate-900\/60 {
+    background-color: rgb(255 255 255 / 0.6);
+  }
+
+  .admin-theme .bg-slate-800 {
+    background-color: #f1f5f9;
+  }
+
+  .admin-theme .border-slate-800,
+  .admin-theme .border-slate-800\/80 {
+    border-color: #e2e8f0;
+  }
+
+  .admin-theme .border-slate-700 {
+    border-color: #cbd5e1;
+  }
+
+  .admin-theme .divide-slate-800\/60 > :not(:last-child) {
+    border-color: rgb(226 232 240 / 0.6);
+  }
+
+  .admin-theme .text-slate-400,
+  .admin-theme .text-slate-500 {
+    color: #64748b;
+  }
+
+  .admin-theme .text-slate-300 {
+    color: #475569;
+  }
+
+  .admin-theme .text-slate-200 {
+    color: #334155;
+  }
+
+  .admin-theme .hover\:bg-slate-800:hover {
+    background-color: #f1f5f9;
+  }
+
+  .admin-theme .hover\:bg-slate-800\/40:hover {
+    background-color: rgb(241 245 249 / 0.4);
+  }
 }
