@@ -334,7 +334,9 @@ export async function verifySignupOtp(email, code) {
 export async function sendLoginOtp(user) {
   const smtpCheck = validateSmtpConfig();
   if (!smtpCheck.ok) {
-    throw new Error(smtpCheck.error);
+    const error = new Error(smtpCheck.error);
+    error.code = "SMTP_CONFIG_ERROR";
+    throw error;
   }
 
   const code = String(randomInt(100000, 1000000));

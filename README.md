@@ -20,7 +20,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 DocVault uses Prisma ORM with MySQL for accounts, sessions, documents, folders,
 and trash. This project already contains the Prisma schema and client setup.
-Copy `.env.example` to `.env` and set `DATABASE_URL` to your MySQL connection
+Copy `.env.example` to `.env.local` and set `DATABASE_URL` to your MySQL connection
 string. Put your username, password, host, port, and database name in the URL:
 
 ```env
@@ -29,7 +29,7 @@ DATABASE_URL="mysql://USERNAME:PASSWORD@HOST:3306/docvault"
 
 For example, replace `USERNAME`, `PASSWORD`, `HOST`, `3306`, and `docvault` with
 your own MySQL connection details. URL-encode special characters in the username
-or password (for example, `@` becomes `%40`). Never commit `.env`.
+or password (for example, `@` becomes `%40`). Never commit `.env.local`.
 
 Create the database once in MySQL:
 
@@ -64,11 +64,30 @@ SELECT id, name, type, size, createdAt FROM Document;
 ## Email OTP authentication
 
 Sign-up and sign-in require a six-digit email OTP after the password step.
-Configure a trusted SMTP provider in `.env.local` using the variables shown in
-`.env.example`: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`,
-`SMTP_PASSWORD`, and `SMTP_FROM`. Set `OTP_SECRET` to a random secret of at
-least 32 characters. Keep SMTP credentials and `OTP_SECRET` server-side; never
-use `NEXT_PUBLIC_` prefixes for them.
+The server-side mail utility sends signup, resend, and login OTP messages using
+Nodemailer. In local development, Next.js reads the SMTP settings from
+`.env.local`; in production, add the same variables in Vercel under
+**Project Settings → Environment Variables**, enabled for **Production**:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your-gmail-address@gmail.com
+SMTP_PASSWORD=your-16-character-google-app-password
+SMTP_FROM=DocVault <your-gmail-address@gmail.com>
+```
+
+For Gmail, create an App Password after enabling 2-Step Verification. Do not
+use your regular Gmail password. Port `465` uses implicit TLS; port `587` uses
+STARTTLS. SMTP credentials, `DATABASE_URL`, and `OTP_SECRET` are server-only;
+never use `NEXT_PUBLIC_` prefixes. Set `OTP_SECRET` to a random secret of at
+least 32 characters.
+
+The npm `dev`, `build`, and `start` scripts enable Node.js system CA trust so
+SMTP TLS works on machines whose trusted certificate authority is installed in
+the operating system (for example, managed Windows networks). The setting is
+passed as an environment variable to Next.js and its build workers, while TLS
+certificate verification remains enabled. Node.js 22.15 or later is required.
 
 After updating `.env.local`, stop and restart Next.js. Apply the OTP database
 migration with:
@@ -81,6 +100,12 @@ npx prisma generate
 Codes expire after 10 minutes and have at most five verification attempts. OTP
 delivery requires valid SMTP settings in every environment; development mode
 does not return verification codes to the browser or log them to the server.
+To test locally, run `npm run dev` and use the signup form with an email inbox
+you can access; confirm the OTP arrives, then enter it to complete verification.
+Also test resend and login OTP from their existing UI flows. On Vercel, save the
+Production variables and redeploy, then repeat signup or login on the live
+website with an inbox you can access. Vercel environment variable changes only
+apply to new deployments.
 
 ## Private Cloudinary media storage
 

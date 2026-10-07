@@ -18,7 +18,18 @@ export async function GET(request) {
   const search = url.searchParams.get("search")?.trim();
   const status = url.searchParams.get("status");
   const type = url.searchParams.get("type")?.trim().toUpperCase();
+  const userIdParams = url.searchParams.getAll("userId");
+  if (userIdParams.length > 1) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+  const selectedUserId = userIdParams.length === 1 ? userIdParams[0] : null;
+
+  if (selectedUserId !== null && !selectedUserId.trim()) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+
   const where = {
+    ...(selectedUserId !== null ? { userId: selectedUserId } : {}),
     ...(status === "trash" ? { deleted: true } : status === "active" ? { deleted: false } : {}),
     ...(type ? { type } : {}),
     ...(search
@@ -33,6 +44,23 @@ export async function GET(request) {
   };
 
   try {
+    const selectedUser =
+      selectedUserId === null
+        ? null
+        : await prisma.user.findUnique({
+            where: { id: selectedUserId },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              _count: { select: { documents: true } },
+            },
+          });
+
+    if (selectedUserId !== null && !selectedUser) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+
     const [documents, total] = await Promise.all([
       prisma.document.findMany({
         where,
@@ -53,7 +81,22 @@ export async function GET(request) {
       prisma.document.count({ where }),
     ]);
 
-    return NextResponse.json({ documents, total, page, pageSize }, {
+    return NextResponse.json({
+      documents,
+      total,
+      page,
+      pageSize,
+      ...(selectedUser
+        ? {
+            selectedUser: {
+              id: selectedUser.id,
+              name: selectedUser.name,
+              email: selectedUser.email,
+              documentCount: selectedUser._count.documents,
+            },
+          }
+        : {}),
+    }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

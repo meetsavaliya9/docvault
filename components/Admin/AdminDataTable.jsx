@@ -165,10 +165,15 @@ function sortableValue(item, key) {
   return key.split(".").reduce((value, part) => value?.[part], item);
 }
 
-export default function AdminDataTable({ resource, initialSearch = "" }) {
+export default function AdminDataTable({
+  resource,
+  initialSearch = "",
+  selectedUserId = null,
+}) {
   const config = resourceConfig[resource];
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
   const [search, setSearch] = useState(initialSearch);
@@ -188,6 +193,9 @@ export default function AdminDataTable({ resource, initialSearch = "" }) {
       page: String(page),
       pageSize: String(pageSize),
     });
+    if (resource === "documents" && selectedUserId !== null) {
+      params.set("userId", selectedUserId);
+    }
     if (search.trim()) params.set("search", search.trim());
     if (status !== "all") params.set("status", status);
     if (resource === "documents" && type !== "all") params.set("type", type);
@@ -198,15 +206,21 @@ export default function AdminDataTable({ resource, initialSearch = "" }) {
         setError("");
         setItems(result[config.collection] || []);
         setTotal(result.total || 0);
+        setSelectedUser(result.selectedUser || null);
       })
       .catch((loadError) => {
-        if (loadError.name !== "AbortError") setError(loadError.message || `Could not load ${config.title.toLowerCase()}.`);
+        if (loadError.name !== "AbortError") {
+          setItems([]);
+          setTotal(0);
+          setSelectedUser(null);
+          setError(loadError.message || `Could not load ${config.title.toLowerCase()}.`);
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [config, page, pageSize, reload, resource, search, status, type]);
+  }, [config, page, pageSize, reload, resource, search, selectedUserId, status, type]);
 
   useEffect(() => {
     if (resource !== "subscriptions") return;
@@ -261,9 +275,12 @@ export default function AdminDataTable({ resource, initialSearch = "" }) {
     setError("");
     setNotice("");
     try {
-      const endpoint = resource === "users"
+      let endpoint = resource === "users"
         ? `/api/admin/users/${encodeURIComponent(item.id)}`
         : `/api/admin/documents/${encodeURIComponent(item.id)}`;
+      if (resource === "documents" && selectedUserId !== null) {
+        endpoint += `?userId=${encodeURIComponent(selectedUserId)}`;
+      }
       const response = await fetch(endpoint, isDelete
         ? { method: "DELETE" }
         : {
@@ -288,6 +305,22 @@ export default function AdminDataTable({ resource, initialSearch = "" }) {
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">Management</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{config.title}</h1>
           <p className="mt-1 text-sm text-slate-500">{config.description}</p>
+          {resource === "documents" && selectedUserId !== null && (
+            <div className="mt-3">
+              <p className="text-sm font-medium text-slate-700">
+                Showing files for: {selectedUser?.name || selectedUser?.email || "Selected user"}
+              </p>
+              {selectedUser?.name && selectedUser?.email && (
+                <p className="mt-0.5 text-sm text-slate-500">{selectedUser.email}</p>
+              )}
+              <Link
+                href="/admin/users"
+                className="mt-3 inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                ← Back to Users
+              </Link>
+            </div>
+          )}
         </div>
         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-sm">
           <span className="font-semibold text-slate-900">{total.toLocaleString()}</span> {config.title.toLowerCase()}
@@ -350,8 +383,18 @@ export default function AdminDataTable({ resource, initialSearch = "" }) {
             <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5" /></svg>
             </span>
-            <h2 className="mt-4 text-sm font-semibold text-slate-900">No {config.title.toLowerCase()} found</h2>
-            <p className="mt-1 text-sm text-slate-500">{search || status !== "all" ? "Try adjusting your search or filters." : `There are no ${config.title.toLowerCase()} to display yet.`}</p>
+            <h2 className="mt-4 text-sm font-semibold text-slate-900">
+              {resource === "documents" &&
+              selectedUserId !== null &&
+              selectedUser?.documentCount === 0
+                ? "No documents uploaded by this user."
+                : `No ${config.title.toLowerCase()} found`}
+            </h2>
+            {!(resource === "documents" &&
+              selectedUserId !== null &&
+              selectedUser?.documentCount === 0) && (
+              <p className="mt-1 text-sm text-slate-500">{search || status !== "all" || type !== "all" ? "Try adjusting your search or filters." : `There are no ${config.title.toLowerCase()} to display yet.`}</p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -377,6 +420,7 @@ export default function AdminDataTable({ resource, initialSearch = "" }) {
                         {resource === "users" && (
                           <>
                             <button type="button" onClick={() => setSelected(item)} className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">View</button>
+                            <Link href={`/admin/documents?userId=${encodeURIComponent(item.id)}`} className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">View Files</Link>
                             {!item.isAdmin && <button type="button" onClick={() => handleAction(item, "block")} className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">{item.isBlocked ? "Unblock" : "Block"}</button>}
                             {!item.isAdmin && <button type="button" onClick={() => handleAction(item, "delete")} className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">Delete</button>}
                             {item.isAdmin && <span className="px-2 text-[11px] font-medium text-slate-400">Admin</span>}

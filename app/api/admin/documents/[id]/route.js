@@ -95,18 +95,34 @@ export async function GET(_request, { params }) {
   }
 }
 
-export async function DELETE(_request, { params }) {
+export async function DELETE(request, { params }) {
   const { response } = await requireAdmin();
   if (response) return response;
 
+  const url = new URL(request.url);
+  const userIdParams = url.searchParams.getAll("userId");
+  if (userIdParams.length > 1 || (userIdParams.length === 1 && !userIdParams[0].trim())) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+  const selectedUserId = userIdParams.length === 1 ? userIdParams[0] : null;
   const { id: documentId } = await params;
   if (!documentId) {
     return NextResponse.json({ error: "Document ID is required." }, { status: 400 });
   }
 
   try {
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
+    if (
+      selectedUserId !== null &&
+      !(await prisma.user.findUnique({ where: { id: selectedUserId }, select: { id: true } }))
+    ) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+
+    const document = await prisma.document.findFirst({
+      where: {
+        id: documentId,
+        ...(selectedUserId !== null ? { userId: selectedUserId } : {}),
+      },
       select: {
         id: true,
         name: true,
@@ -131,7 +147,10 @@ export async function DELETE(_request, { params }) {
     }
 
     await prisma.document.delete({
-      where: { id: documentId },
+      where: {
+        id: documentId,
+        ...(selectedUserId !== null ? { userId: selectedUserId } : {}),
+      },
     });
 
     return NextResponse.json({

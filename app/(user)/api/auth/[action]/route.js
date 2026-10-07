@@ -186,20 +186,47 @@ export async function POST(request, { params }) {
 
     return errorResponse("Not found.", 404);
   } catch (error) {
-    console.error("Auth action failed:", error);
+    const code = typeof error?.code === "string" ? error.code : "UNKNOWN";
+    const msg = typeof error === "string" ? error : error?.message || "";
+    const combined = `${code} ${msg}`.toLowerCase();
 
-    const msg = error.message || "";
+    console.error("Auth action failed.", {
+      code,
+      message: msg,
+      stack: error?.stack,
+    });
+
     let publicMessage = "Could not complete the request. Please try again.";
 
-    if (error.code === "SMTP_AUTH_FAILED" || msg.includes("SMTP_AUTH_FAILED") || error.code === "EAUTH") {
+    if (code === "SMTP_AUTH_FAILED" || combined.includes("smtp_auth_failed") || code === "EAUTH") {
       publicMessage =
-        "Gmail rejected the SMTP login. Check SMTP_USER and SMTP_PASSWORD; for Gmail, use a Google App Password for that account, not its regular password.";
-    } else if (error.code === "SMTP_CONFIG_ERROR" || msg.startsWith("SMTP is not configured") || msg.includes("credentials in .env.local are still set to placeholder")) {
-      publicMessage = msg;
-    } else if (error.code === "SMTP_SEND_FAILED" || msg.includes("Could not send verification email")) {
-      publicMessage = "Could not send verification email. Please check your SMTP settings and try again.";
-    } else if (msg.includes("DATABASE_URL") || error.code?.startsWith("P")) {
+        "SMTP authentication failed. Check SMTP_USER and SMTP_PASSWORD; for Gmail, use a Google App Password, not your regular account password.";
+    } else if (
+      code === "SMTP_CONFIG_ERROR" ||
+      code === "SMTP_TLS_CERTIFICATE_ERROR" ||
+      code === "SMTP_CONNECTION_TIMEOUT" ||
+      code === "SMTP_CONNECTION_FAILED" ||
+      code === "SMTP_ADDRESS_REJECTED" ||
+      msg.startsWith("SMTP is not configured") ||
+      msg.includes("SMTP settings still contain example placeholder values")
+    ) {
+      publicMessage = msg || "SMTP configuration is invalid. Check your environment settings.";
+    } else if (code === "SMTP_SEND_FAILED" || msg.includes("Could not send verification email")) {
+      publicMessage = msg || "Could not send verification email. Please check your SMTP settings and try again.";
+    } else if (
+      msg.includes("DATABASE_URL") ||
+      combined.includes("database_url") ||
+      combined.includes("prisma") ||
+      combined.includes("econnrefused") ||
+      combined.includes("enotfound") ||
+      combined.includes("er_access_denied_error") ||
+      combined.includes("connect econnrefused") ||
+      code.startsWith("P") ||
+      /^E[A-Z_]+$/.test(code)
+    ) {
       publicMessage = "Database error. Please check MySQL connection and migrations.";
+    } else if (msg) {
+      publicMessage = msg;
     }
 
     return errorResponse(publicMessage, 500);

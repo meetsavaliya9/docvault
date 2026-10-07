@@ -8,5 +8,18 @@ export const metadata = {
 
 export default async function AdminDocumentsPage({ searchParams }) {
   const params = await searchParams;
-  return <AdminDataTable resource="documents" initialSearch={params?.search || ""} />;
+  const selectedUserId = Object.hasOwn(params || {}, "userId")
+    ? typeof params.userId === "string"
+      ? params.userId
+      : ""
+    : null;
+
+  return (
+    <AdminDataTable
+      key={selectedUserId ?? "all-users"}
+      resource="documents"
+      initialSearch={params?.search || ""}
+      selectedUserId={selectedUserId}
+    />
+  );
 }
