@@ -7,12 +7,14 @@
   },
   "scripts": {
     "dev": "node scripts/next-with-system-ca.mjs dev",
-    "build": "node scripts/next-with-system-ca.mjs build",
+    "build": "prisma generate && node scripts/next-with-system-ca.mjs build",
     "start": "node scripts/next-with-system-ca.mjs start",
+    "postinstall": "prisma generate",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "admin:bootstrap": "node scripts/bootstrap-admin.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

@@ -1,6 +1,19 @@
-const { PrismaClient } = require("@prisma/client");
+const { existsSync } = require("fs");
+const path = require("path");
+const dotenv = require("dotenv");
 
-const prisma = new PrismaClient();
+const envLocalPath = path.resolve(__dirname, "../.env.local");
+if (existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath });
+} else {
+  dotenv.config();
+}
+
+const { PrismaClient } = require("@prisma/client");
+const databaseUrl = process.env.DATABASE_URL?.trim();
+const prisma = new PrismaClient({
+  ...(databaseUrl ? { datasourceUrl: databaseUrl } : {}),
+});
 
 const initialPlans = [
   {

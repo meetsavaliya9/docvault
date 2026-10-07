@@ -3,6 +3,7 @@ import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma";
 import { hashPassword, validateSignupData } from "./session";
 import { sendVerificationOtp, validateSmtpConfig } from "@/lib/email";
+import { logSafeServerError, runSignupDatabaseOperation } from "@/lib/auth/errorDiagnostics";
 
 export { sendVerificationOtp, validateSmtpConfig };
 
@@ -43,20 +44,37 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
   }
 
   const normalizedEmail = email.trim().toLowerCase();
+  const diagnosticSecrets = [normalizedEmail, password, confirmPassword];
+
+  await runSignupDatabaseOperation(
+    "database connection",
+    () => prisma.$connect(),
+    { secrets: diagnosticSecrets }
+  );
 
   // 2. Check if an account already exists in MySQL
-  const existingUser = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-    select: { id: true },
-  });
+  const existingUser = await runSignupDatabaseOperation(
+    "existing-user lookup",
+    () =>
+      prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      }),
+    { secrets: diagnosticSecrets }
+  );
   if (existingUser) {
     return { error: "An account with this email already exists.", status: 409 };
   }
 
   // 3. Check for existing pending verification and enforce resend cooldown
-  const existingPending = await prisma.emailVerification.findUnique({
-    where: { email: normalizedEmail },
-  });
+  const existingPending = await runSignupDatabaseOperation(
+    "pending-email-verification lookup",
+    () =>
+      prisma.emailVerification.findUnique({
+        where: { email: normalizedEmail },
+      }),
+    { secrets: diagnosticSecrets }
+  );
 
   if (existingPending) {
     const elapsed = Date.now() - new Date(existingPending.lastSentAt).getTime();
@@ -73,6 +91,7 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
   // 4. Validate SMTP configuration before touching database
   const smtpCheck = validateSmtpConfig();
   if (!smtpCheck.ok) {
+    console.error("Signup API error: SMTP configuration invalid:", smtpCheck.error);
     return { error: smtpCheck.error, status: 500 };
   }
 
@@ -83,26 +102,29 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
   const expiresAt = new Date(Date.now() + OTP_LIFETIME_MS);
 
   // 6. Store or update pending verification record in MySQL
-  await prisma.emailVerification.upsert({
-    where: { email: normalizedEmail },
-    create: {
-      email: normalizedEmail,
-      name: name.trim(),
-      passwordHash,
-      otpHash,
-      expiresAt,
-      attempts: 0,
-      lastSentAt: new Date(),
-    },
-    update: {
-      name: name.trim(),
-      passwordHash,
-      otpHash,
-      expiresAt,
-      attempts: 0,
-      lastSentAt: new Date(),
-    },
-  });
+  await runSignupDatabaseOperation("pending OTP creation/update", () =>
+    prisma.emailVerification.upsert({
+      where: { email: normalizedEmail },
+      create: {
+        email: normalizedEmail,
+        name: name.trim(),
+        passwordHash,
+        otpHash,
+        expiresAt,
+        attempts: 0,
+        lastSentAt: new Date(),
+      },
+      update: {
+        name: name.trim(),
+        passwordHash,
+        otpHash,
+        expiresAt,
+        attempts: 0,
+        lastSentAt: new Date(),
+      },
+    }),
+    { secrets: [...diagnosticSecrets, passwordHash, otp, otpHash] }
+  );
 
   // 7. Send OTP via Gmail SMTP
   try {
@@ -111,8 +133,20 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
       expiryMinutes: 10,
     });
   } catch (mailError) {
+    logSafeServerError("Signup email delivery failed", mailError, {
+      secrets: [process.env.SMTP_USER, normalizedEmail],
+    });
+
     // If sending fails, delete the pending record so user can retry cleanly
-    await prisma.emailVerification.delete({ where: { email: normalizedEmail } }).catch(() => {});
+    try {
+      await runSignupDatabaseOperation("pending OTP cleanup after email failure", () =>
+        prisma.emailVerification.delete({ where: { email: normalizedEmail } })
+      );
+    } catch (cleanupError) {
+      logSafeServerError("Signup pending OTP cleanup failed", cleanupError, {
+        secrets: [process.env.SMTP_USER, normalizedEmail],
+      });
+    }
     return {
       error: mailError.message || "Failed to send verification email.",
       status: 500,
@@ -287,37 +321,34 @@ export async function verifySignupOtp(email, code) {
 
   // 5. SUCCESS: ONLY NOW create the actual User record in MySQL using a safe transaction!
   try {
-    const newUser = await prisma.$transaction(async (tx) => {
-      // Check if user was registered concurrently
-      const conflict = await tx.user.findUnique({
-        where: { email: normalizedEmail },
-        select: { id: true },
-      });
-      if (conflict) {
-        await tx.emailVerification.delete({ where: { id: pending.id } });
-        const err = new Error("An account with this email already exists.");
-        err.code = "P2002";
-        throw err;
-      }
-
-      // Create the permanent User record
-      const createdUser = await tx.user.create({
-        data: {
-          id: randomUUID(),
-          email: normalizedEmail,
-          name: pending.name || null,
-          passwordHash: pending.passwordHash,
-        },
-        select: { id: true, email: true, name: true },
-      });
-
-      // Delete the pending verification record
-      await tx.emailVerification.delete({
-        where: { id: pending.id },
-      });
-
-      return createdUser;
-    });
+    const [newUser] = await runSignupDatabaseOperation(
+      "verified-account creation and OTP deletion transaction",
+      () =>
+        prisma.$transaction([
+          prisma.user.create({
+            data: {
+              id: randomUUID(),
+              email: normalizedEmail,
+              name: pending.name || null,
+              passwordHash: pending.passwordHash,
+              subscriptions: {
+                create: {
+                  provider: "internal",
+                  planKey: "FREE",
+                  planId: "FREE",
+                  status: "active",
+                  startDate: new Date(),
+                },
+              },
+            },
+            select: { id: true, email: true, name: true },
+          }),
+          prisma.emailVerification.delete({
+            where: { id: pending.id },
+          }),
+        ]),
+      { secrets: [normalizedEmail, code, pending.passwordHash, pending.otpHash] }
+    );
 
     return { success: true, user: newUser };
   } catch (error) {

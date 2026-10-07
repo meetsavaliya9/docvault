@@ -61,6 +61,25 @@ connection URL is never sent to the browser. To inspect stored rows, run
 SELECT id, name, type, size, createdAt FROM Document;
 ```
 
+## Administrator account setup
+
+Admin accounts sign in through the existing login flow; they do not need to use
+public signup. An account must first exist in the database and its email must be
+included in the comma-separated `ADMIN_EMAILS` allowlist. To create an initial
+admin account, set `ADMIN_EMAIL` to an allowlisted email and `ADMIN_PASSWORD` to
+a unique password of at least 12 characters in `.env.local`, then run:
+
+```bash
+npm run admin:bootstrap
+```
+
+The bootstrap command creates the account only if it does not already exist and
+never changes an existing account or password. It uses the configured
+`DATABASE_URL`; to create the account for production, run it against the
+production database using Railway's public connection URL. Keep all credentials
+out of source control, and remove the temporary `ADMIN_PASSWORD` value after
+bootstrapping.
+
 ## Email OTP authentication
 
 Sign-up and sign-in require a six-digit email OTP after the password step.

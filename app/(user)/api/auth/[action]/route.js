@@ -15,6 +15,7 @@ import {
   verifySignupOtp,
 } from "@/app/lib/auth/emailOtp";
 import { createAdminSession, isAdminEmail } from "@/lib/auth/admin";
+import { logSafeServerError, runSignupDatabaseOperation } from "@/lib/auth/errorDiagnostics";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,7 @@ export async function GET(_request, { params }) {
 
 export async function POST(request, { params }) {
   const { action } = await params;
+  let diagnosticSecrets = [];
 
   try {
     if (action === "logout") {
@@ -64,6 +66,13 @@ export async function POST(request, { params }) {
     } catch {
       return errorResponse("Request body must be valid JSON.", 400);
     }
+    diagnosticSecrets = [
+      body?.email,
+      body?.password,
+      body?.confirmPassword,
+      body?.otp,
+      body?.code,
+    ].filter((value) => typeof value === "string");
 
     // 1. Send OTP for Signup / Create Account
     if (action === "signup" || action === "send-otp") {
@@ -118,9 +127,13 @@ export async function POST(request, { params }) {
       }
 
       // Check if there is a pending signup verification for this email
-      const pending = await prisma.emailVerification.findUnique({
-        where: { email },
-      });
+      const pending = await runSignupDatabaseOperation(
+        "OTP verification pending-record lookup",
+        () =>
+          prisma.emailVerification.findUnique({
+            where: { email },
+          })
+      );
 
       if (pending) {
         // Pending signup: verify OTP and create account only if valid
@@ -186,15 +199,17 @@ export async function POST(request, { params }) {
 
     return errorResponse("Not found.", 404);
   } catch (error) {
+    logSafeServerError(
+      action === "signup" || action === "send-otp"
+        ? "AUTH SIGNUP ACTION FAILED"
+        : `AUTH ACTION FAILED [${action}]`,
+      error,
+      { secrets: diagnosticSecrets }
+    );
+
     const code = typeof error?.code === "string" ? error.code : "UNKNOWN";
     const msg = typeof error === "string" ? error : error?.message || "";
     const combined = `${code} ${msg}`.toLowerCase();
-
-    console.error("Auth action failed.", {
-      code,
-      message: msg,
-      stack: error?.stack,
-    });
 
     let publicMessage = "Could not complete the request. Please try again.";
 
