@@ -15,7 +15,11 @@ import {
   verifySignupOtp,
 } from "@/app/lib/auth/emailOtp";
 import { createAdminSession, isAdminEmail } from "@/lib/auth/admin";
-import { logSafeServerError, runSignupDatabaseOperation } from "@/lib/auth/errorDiagnostics";
+import {
+  logSafeServerError,
+  logSignupError,
+  runSignupDatabaseOperation,
+} from "@/lib/auth/errorDiagnostics";
 
 export const runtime = "nodejs";
 
@@ -48,8 +52,11 @@ export async function GET(_request, { params }) {
 export async function POST(request, { params }) {
   const { action } = await params;
   let diagnosticSecrets = [];
+  const isSignupAction = action === "signup" || action === "send-otp";
 
   try {
+    if (isSignupAction) console.log("[SIGNUP] started");
+
     if (action === "logout") {
       await destroySession();
       return NextResponse.json({ success: true });
@@ -62,8 +69,13 @@ export async function POST(request, { params }) {
 
     let body;
     try {
+      if (isSignupAction) console.log("[SIGNUP] request parsing started");
       body = await request.json();
-    } catch {
+      if (isSignupAction) console.log("[SIGNUP] request parsing completed");
+    } catch (error) {
+      if (isSignupAction) {
+        logSignupError(error, { secrets: diagnosticSecrets });
+      }
       return errorResponse("Request body must be valid JSON.", 400);
     }
     diagnosticSecrets = [
@@ -76,6 +88,7 @@ export async function POST(request, { params }) {
 
     // 1. Send OTP for Signup / Create Account
     if (action === "signup" || action === "send-otp") {
+      console.log("[SIGNUP] signup handler started");
       const result = await sendSignupOtp({
         name: body?.name,
         email: body?.email,
@@ -206,7 +219,11 @@ export async function POST(request, { params }) {
       error,
       { secrets: diagnosticSecrets }
     );
+    if (isSignupAction) {
+      logSignupError(error, { secrets: diagnosticSecrets });
+    }
 
+    // The actual exception is logged above, before applying a fallback code.
     const code = typeof error?.code === "string" ? error.code : "UNKNOWN";
     const msg = typeof error === "string" ? error : error?.message || "";
     const combined = `${code} ${msg}`.toLowerCase();

@@ -37,15 +37,19 @@ export function hashOtp(email, code) {
  * NOTE: The User record is NEVER created here.
  */
 export async function sendSignupOtp({ name, email, password, confirmPassword }) {
+  console.log("[SIGNUP] input validation started");
   // 1. Validate all signup inputs
   const validationError = validateSignupData({ name, email, password, confirmPassword });
   if (validationError) {
+    console.log("[SIGNUP] input validation failed");
     return { error: validationError, status: 400 };
   }
+  console.log("[SIGNUP] input validation completed");
 
   const normalizedEmail = email.trim().toLowerCase();
   const diagnosticSecrets = [normalizedEmail, password, confirmPassword];
 
+  console.log("[SIGNUP] checking database");
   await runSignupDatabaseOperation(
     "database connection",
     () => prisma.$connect(),
@@ -53,6 +57,7 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
   );
 
   // 2. Check if an account already exists in MySQL
+  console.log("[SIGNUP] user lookup started");
   const existingUser = await runSignupDatabaseOperation(
     "existing-user lookup",
     () =>
@@ -62,11 +67,13 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
       }),
     { secrets: diagnosticSecrets }
   );
+  console.log("[SIGNUP] user lookup completed");
   if (existingUser) {
     return { error: "An account with this email already exists.", status: 409 };
   }
 
   // 3. Check for existing pending verification and enforce resend cooldown
+  console.log("[SIGNUP] pending OTP lookup started");
   const existingPending = await runSignupDatabaseOperation(
     "pending-email-verification lookup",
     () =>
@@ -75,6 +82,7 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
       }),
     { secrets: diagnosticSecrets }
   );
+  console.log("[SIGNUP] pending OTP lookup completed");
 
   if (existingPending) {
     const elapsed = Date.now() - new Date(existingPending.lastSentAt).getTime();
@@ -89,6 +97,13 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
   }
 
   // 4. Validate SMTP configuration before touching database
+  console.log("[SIGNUP] SMTP config check", {
+    host: !!process.env.SMTP_HOST,
+    port: !!process.env.SMTP_PORT,
+    user: !!process.env.SMTP_USER,
+    password: !!process.env.SMTP_PASSWORD,
+    from: !!process.env.SMTP_FROM,
+  });
   const smtpCheck = validateSmtpConfig();
   if (!smtpCheck.ok) {
     console.error("Signup API error: SMTP configuration invalid:", smtpCheck.error);
@@ -96,10 +111,14 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
   }
 
   // 5. Generate cryptographically secure 6-digit OTP
+  console.log("[SIGNUP] OTP generation started");
   const otp = String(randomInt(100000, 1000000));
   const otpHash = hashOtp(normalizedEmail, otp);
+  console.log("[SIGNUP] password hashing started");
   const passwordHash = await hashPassword(password);
+  console.log("[SIGNUP] password hashing completed");
   const expiresAt = new Date(Date.now() + OTP_LIFETIME_MS);
+  console.log("[SIGNUP] OTP generation completed");
 
   // 6. Store or update pending verification record in MySQL
   await runSignupDatabaseOperation("pending OTP creation/update", () =>
@@ -128,10 +147,13 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
 
   // 7. Send OTP via Gmail SMTP
   try {
+    console.log("[SIGNUP] email sending started");
     await sendVerificationOtp(normalizedEmail, otp, {
       name: name.trim(),
       expiryMinutes: 10,
+      operation: "signup",
     });
+    console.log("[SIGNUP] email sending completed");
   } catch (mailError) {
     logSafeServerError("Signup email delivery failed", mailError, {
       secrets: [process.env.SMTP_USER, normalizedEmail],
