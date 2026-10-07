@@ -5,6 +5,29 @@ import { normalizeDocument } from "./documentUtils";
 
 const VaultContext = createContext(null);
 
+async function readVaultResponse(response, resource) {
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    result = null;
+  }
+
+  if (!response.ok) {
+    const reason =
+      typeof result?.error === "string"
+        ? result.error
+        : "The server returned an unexpected response.";
+    throw new Error(`${resource} request failed (${response.status}): ${reason}`);
+  }
+
+  if (!result || typeof result !== "object") {
+    throw new Error(`${resource} returned an invalid response.`);
+  }
+
+  return result;
+}
+
 const DEFAULT_FOLDERS = [
   {
     id: "f-1",
@@ -121,17 +144,14 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
           fetch("/api/vault", { cache: "no-store" }),
           fetch("/api/billing", { cache: "no-store" }),
         ]);
-        if (!documentsResponse.ok || !vaultResponse.ok || !billingResponse.ok) {
-          throw new Error("Could not load your documents from MySQL.");
-        }
-        const [{ documents: savedDocuments }, savedVault, savedBilling] = await Promise.all([
-          documentsResponse.json(),
-          vaultResponse.json(),
-          billingResponse.json(),
+        const [savedDocumentsResult, savedVault, savedBilling] = await Promise.all([
+          readVaultResponse(documentsResponse, "Documents"),
+          readVaultResponse(vaultResponse, "Vault"),
+          readVaultResponse(billingResponse, "Subscription"),
         ]);
         if (cancelled) return;
 
-        setDocuments(savedDocuments.map(normalizeDocument));
+        setDocuments((savedDocumentsResult.documents || []).map(normalizeDocument));
         setFolders(savedVault.folders?.length ? savedVault.folders : DEFAULT_FOLDERS);
         setTrash(savedVault.trash || []);
         setBilling(savedBilling);

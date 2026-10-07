@@ -1,11 +1,11 @@
-const { PrismaClient, Plan } = require("@prisma/client");
+const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
 const initialPlans = [
   {
     id: "FREE",
-    slug: Plan.FREE,
+    slug: "FREE",
     name: "Free",
     price: 0,
     currency: "INR",
@@ -20,7 +20,7 @@ const initialPlans = [
   },
   {
     id: "PLUS",
-    slug: Plan.PLUS,
+    slug: "PLUS",
     name: "Plus",
     price: 19900,
     currency: "INR",
@@ -35,7 +35,7 @@ const initialPlans = [
   },
   {
     id: "PRO",
-    slug: Plan.PRO,
+    slug: "PRO",
     name: "Pro",
     price: 49900,
     currency: "INR",

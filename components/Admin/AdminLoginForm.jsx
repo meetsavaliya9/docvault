@@ -25,7 +25,9 @@ export default function AdminLoginForm() {
       });
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || "Could not sign in to the admin panel.");
+        throw new Error(
+          result.error || "Could not sign in to the admin panel.",
+        );
       }
       router.replace(result.redirectTo || "/admin");
       router.refresh();
@@ -38,7 +40,10 @@ export default function AdminLoginForm() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8 sm:py-12">
       <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:rounded-3xl sm:p-10">
-        <Link href="/admin/login" className="mb-8 flex items-center justify-center gap-3">
+        <Link
+          href="/admin/login"
+          className="mb-8 flex items-center justify-center gap-3"
+        >
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25">
             <VaultIcon className="h-6 w-6" />
           </span>
@@ -60,7 +65,8 @@ export default function AdminLoginForm() {
             Administrator Access
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
-            Sign in with an authorized administrator account to oversee users, enforce retention, and audit storage.
+            Sign in with an authorized administrator account to oversee users,
+            enforce retention, and audit storage.
           </p>
         </div>
 
@@ -84,7 +90,7 @@ export default function AdminLoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15"
-              placeholder="admin@gmail.com"
+              placeholder="Enter admin Email"
             />
           </label>
 
@@ -97,7 +103,7 @@ export default function AdminLoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15"
-              placeholder="••••••••••••"
+              placeholder="Enter password"
             />
           </label>
 
@@ -109,7 +115,6 @@ export default function AdminLoginForm() {
             {pending ? "Signing in..." : "Sign in to Admin Panel"}
           </button>
         </form>
-
       </section>
     </main>
   );

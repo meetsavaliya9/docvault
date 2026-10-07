@@ -3,13 +3,14 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { getBillingSummary } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
-import { getSubscriptionPlanById } from "@/lib/subscriptionPlans";
+import {
+  getSubscriptionPlanById,
+  getUserSubscriptionPlan,
+} from "@/lib/subscriptionPlans";
 import { getRazorpayClient, getRazorpayCredentials } from "@/lib/razorpay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const PLAN_RANK = { free: 0, plus: 1, pro: 2 };
 
 export async function POST(request) {
   const user = await getAuthenticatedUser();
@@ -44,7 +45,12 @@ export async function POST(request) {
     }
 
     const billing = await getBillingSummary(user.id);
-    if ((PLAN_RANK[plan.slug] ?? -1) < (PLAN_RANK[billing.plan] ?? -1)) {
+    const current = await getUserSubscriptionPlan(user.id);
+    if (
+      billing.status === "active" &&
+      billing.currency === plan.currency &&
+      plan.price < current.plan.price
+    ) {
       return NextResponse.json(
         { error: "You cannot switch to a lower plan before your current plan expires." },
         { status: 409 }

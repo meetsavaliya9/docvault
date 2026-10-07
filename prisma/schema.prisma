@@ -7,12 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Plan {
-  FREE
-  PLUS
-  PRO
-}
-
 enum PaymentStatus {
   PENDING
   SUCCESS
@@ -39,11 +33,12 @@ model User {
 
 model SubscriptionPlan {
   id                String         @id @db.VarChar(40)
-  slug              Plan           @unique
-  name              String         @db.VarChar(80)
+  slug              String         @unique @db.VarChar(40)
+  name              String         @unique @db.VarChar(80)
   price             Int
   currency          String         @default("INR") @db.VarChar(3)
   billingPeriod     String         @default("monthly") @db.VarChar(20)
+  razorpayPlanId    String?        @unique @db.VarChar(255)
   description       String         @db.VarChar(500)
   features          Json
   documentLimit     Int?
@@ -60,21 +55,21 @@ model SubscriptionPlan {
 }
 
 model Subscription {
-  id                   String    @id @default(cuid())
+  id                   String            @id @default(cuid())
   userId               String
-  provider             String    @default("stripe") @db.VarChar(20)
-  stripeSubscriptionId String?   @unique @db.VarChar(255)
-  stripePriceId        String?   @db.VarChar(255)
-  planKey              Plan?
-  planId               String?   @db.VarChar(40)
-  status               String    @db.VarChar(40)
+  provider             String            @default("stripe") @db.VarChar(20)
+  stripeSubscriptionId String?           @unique @db.VarChar(255)
+  stripePriceId        String?           @db.VarChar(255)
+  planKey              String?           @db.VarChar(40)
+  planId               String?           @db.VarChar(40)
+  status               String            @db.VarChar(40)
   startDate            DateTime?
   endDate              DateTime?
   currentPeriodEnd     DateTime?
-  cancelAtPeriodEnd    Boolean   @default(false)
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cancelAtPeriodEnd    Boolean           @default(false)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan                 SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
   payments             Payment[]
 
@@ -83,27 +78,27 @@ model Subscription {
 }
 
 model Payment {
-  id               String        @id @default(cuid())
-  userId           String
-  subscriptionId   String?
-  planId           String?       @db.VarChar(40)
-  planName         String        @default("") @db.VarChar(80)
-  billingPeriod    String        @default("monthly") @db.VarChar(20)
-  razorpayOrderId  String        @unique @db.VarChar(255)
-  razorpayPaymentId String?       @unique @db.VarChar(255)
-  razorpaySignature String?       @db.Char(64)
-  amount           Int
-  amountPaid       Int           @default(0)
-  currency         String        @default("INR") @db.VarChar(3)
-  status           PaymentStatus @default(PENDING)
-  refundedAmount   Int           @default(0)
-  plan             Plan
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription     Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  planDetails      SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
-  refunds          PaymentRefund[]
+  id                String            @id @default(cuid())
+  userId            String
+  subscriptionId    String?
+  planId            String?           @db.VarChar(40)
+  planName          String            @default("") @db.VarChar(80)
+  billingPeriod     String            @default("monthly") @db.VarChar(20)
+  razorpayOrderId   String            @unique @db.VarChar(255)
+  razorpayPaymentId String?           @unique @db.VarChar(255)
+  razorpaySignature String?           @db.Char(64)
+  amount            Int
+  amountPaid        Int               @default(0)
+  currency          String            @default("INR") @db.VarChar(3)
+  status            PaymentStatus     @default(PENDING)
+  refundedAmount    Int               @default(0)
+  plan              String            @db.VarChar(40)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription      Subscription?     @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planDetails       SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  refunds           PaymentRefund[]
 
   @@index([userId, status])
   @@index([subscriptionId])
@@ -111,22 +106,22 @@ model Payment {
 }
 
 model PaymentRefund {
-  id              String   @id @default(cuid())
-  razorpayRefundId String   @unique @db.VarChar(255)
-  paymentId       String
-  amount          Int
-  currency        String   @db.VarChar(3)
-  status          String   @db.VarChar(30)
-  processedAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  razorpayRefundId String    @unique @db.VarChar(255)
+  paymentId        String
+  amount           Int
+  currency         String    @db.VarChar(3)
+  status           String    @db.VarChar(30)
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  payment          Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   @@index([paymentId, status])
 }
 
 model SubscriptionPlanPricing {
-  planKey        String   @id @db.VarChar(20)
+  planKey        String   @id @db.VarChar(40)
   amount         Int
   razorpayPlanId String?  @db.VarChar(255)
   updatedAt      DateTime @updatedAt
@@ -134,7 +129,7 @@ model SubscriptionPlanPricing {
 
 model RazorpayPlan {
   providerPlanId String   @id @db.VarChar(255)
-  planKey        String   @db.VarChar(20)
+  planKey        String   @db.VarChar(40)
   amount         Int
   createdAt      DateTime @default(now())
 

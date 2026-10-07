@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-const PLAN_ORDER = { free: 0, plus: 1, pro: 2 };
-
 function formatPrice(amount, currency = "INR") {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -473,12 +471,16 @@ export default function SubscriptionPage() {
         </button>
       </div>
 
-      <section className="grid items-stretch gap-5 md:grid-cols-3">
+      <section className="grid items-stretch gap-5 sm:grid-cols-2 2xl:grid-cols-4">
         {plans.map((plan) => {
           const isCurrent = currentPlan === plan.key;
           const isLowerTier =
-            PLAN_ORDER[plan.key] < PLAN_ORDER[currentPlan] && plan.key !== "free";
+            billing.status === "active" &&
+            plan.currency === billing.currency &&
+            plan.amount < (billing.amount || 0) &&
+            plan.key !== "free";
           const isFreeDowngrade = plan.key === "free" && currentPlan !== "free";
+          const isOtherFreePlan = plan.amount === 0 && !isCurrent && !isFreeDowngrade;
           const isBusy = busy.endsWith(`:${plan.key}`);
           return (
             <article
@@ -545,6 +547,10 @@ export default function SubscriptionPage() {
               ) : isLowerTier ? (
                 <button disabled className="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-500">
                   Available after current plan
+                </button>
+              ) : isOtherFreePlan ? (
+                <button disabled className="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-500">
+                  Free plan
                 </button>
               ) : (
                 <button

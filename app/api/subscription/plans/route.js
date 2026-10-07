@@ -31,7 +31,7 @@ export async function GET() {
           documentLimit: plan.documentLimit,
           storageLimitBytes: plan.storageLimitBytes,
           isRecommended: plan.isRecommended,
-          checkoutAvailable: plan.slug !== "free" && checkoutConfigured,
+          checkoutAvailable: plan.price > 0 && checkoutConfigured,
         })),
         razorpayKeyId: checkoutConfigured ? getRazorpayCredentials().keyId : null,
       },

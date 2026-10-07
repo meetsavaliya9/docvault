@@ -22,18 +22,26 @@ export async function GET() {
     );
   }
 
-  const [folders, trash] = await Promise.all([
-    prisma.folder.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } }),
-    prisma.trashItem.findMany({ where: { userId: user.id }, orderBy: { id: "desc" } }),
-  ]);
+  try {
+    const [folders, trash] = await Promise.all([
+      prisma.folder.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } }),
+      prisma.trashItem.findMany({ where: { userId: user.id }, orderBy: { id: "desc" } }),
+    ]);
 
-  return NextResponse.json(
-    {
-      folders: folders.map((folder) => folder.data),
-      trash: trash.map((item) => item.data),
-    },
-    { headers: NO_CACHE_HEADERS }
-  );
+    return NextResponse.json(
+      {
+        folders: folders.map((folder) => folder.data),
+        trash: trash.map((item) => item.data),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
+  } catch (error) {
+    console.error("Failed to load vault settings from MySQL:", error);
+    return NextResponse.json(
+      { error: "Could not load folders or trash from MySQL. Check database availability." },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
+  }
 }
 
 export async function PUT(request) {

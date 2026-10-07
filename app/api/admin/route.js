@@ -13,6 +13,19 @@ export async function GET(request) {
   const url = new URL(request.url);
   const selectedUserId = url.searchParams.get("userId");
   const documentsOnly = url.searchParams.get("documentsOnly") === "true";
+  const chartPeriod = url.searchParams.get("chartPeriod") || "yearly";
+  const chartPeriodConfig = {
+    weekly: { count: 7, granularity: "day" },
+    monthly: { count: 30, granularity: "day" },
+    yearly: { count: 12, granularity: "month" },
+  }[chartPeriod];
+
+  if (!documentsOnly && !chartPeriodConfig) {
+    return NextResponse.json(
+      { error: "Chart period must be weekly, monthly, or yearly." },
+      { status: 400 }
+    );
+  }
 
   try {
     if (documentsOnly) {
@@ -41,6 +54,11 @@ export async function GET(request) {
       return NextResponse.json({ documents });
     }
 
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const chartStart = chartPeriodConfig.granularity === "day"
+      ? new Date(today.getTime() - (chartPeriodConfig.count - 1) * 24 * 60 * 60 * 1000)
+      : new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - (chartPeriodConfig.count - 1), 1));
     const [
       accounts,
       storageByUser,
@@ -48,6 +66,8 @@ export async function GET(request) {
       activeSubscriptions,
       configuredRazorpayPlans,
       configuredSubscriptionPlans,
+      revenueTotals,
+      recentPayments,
     ] = await Promise.all([
       prisma.user.findMany({
         select: {
@@ -72,7 +92,10 @@ export async function GET(request) {
       prisma.subscription.findMany({
         where: {
           status: { in: ["active", "trialing"] },
-          OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: new Date() } }],
+          AND: [
+            { OR: [{ endDate: null }, { endDate: { gt: now } }] },
+            { OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: now } }] },
+          ],
         },
         select: {
           userId: true,
@@ -92,6 +115,16 @@ export async function GET(request) {
         select: { providerPlanId: true, planKey: true },
       }),
       prisma.subscriptionPlan.findMany(),
+      prisma.payment.groupBy({
+        by: ["currency"],
+        where: { status: "SUCCESS" },
+        _sum: { amountPaid: true },
+        _count: { _all: true },
+      }),
+      prisma.payment.findMany({
+        where: { status: "SUCCESS", createdAt: { gte: chartStart } },
+        select: { amountPaid: true, currency: true, createdAt: true },
+      }),
     ]);
 
     const razorpayPlanById = new Map(
@@ -119,6 +152,12 @@ export async function GET(request) {
       if (!subscriptionByUser.has(subscription.userId)) {
         subscriptionByUser.set(subscription.userId, subscription);
       }
+    }
+    const nonAdminAccounts = accounts.filter((account) => !isAdminEmail(account.email));
+    const planSubscriberCounts = new Map();
+    for (const account of nonAdminAccounts) {
+      const planKey = resolvePlanKey(subscriptionByUser.get(account.id)) || "free";
+      planSubscriberCounts.set(planKey, (planSubscriberCounts.get(planKey) || 0) + 1);
     }
 
     const users = accounts.map((acc) => {
@@ -199,15 +238,82 @@ export async function GET(request) {
       }
     }
 
+    const chartBuckets = Array.from({ length: chartPeriodConfig.count }, (_, index) => {
+      const bucketDate = chartPeriodConfig.granularity === "day"
+        ? new Date(chartStart.getTime() + index * 24 * 60 * 60 * 1000)
+        : new Date(Date.UTC(chartStart.getUTCFullYear(), chartStart.getUTCMonth() + index, 1));
+      const key = chartPeriodConfig.granularity === "day"
+        ? `${bucketDate.getUTCFullYear()}-${String(bucketDate.getUTCMonth() + 1).padStart(2, "0")}-${String(bucketDate.getUTCDate()).padStart(2, "0")}`
+        : `${bucketDate.getUTCFullYear()}-${String(bucketDate.getUTCMonth() + 1).padStart(2, "0")}`;
+      const label = chartPeriodConfig.granularity === "day"
+        ? chartPeriod === "weekly"
+          ? new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", timeZone: "UTC" }).format(bucketDate)
+          : String(bucketDate.getUTCDate())
+        : new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" }).format(bucketDate);
+      return { key, label };
+    });
+    const getBucketKey = (date) => chartPeriodConfig.granularity === "day"
+      ? `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`
+      : `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    const revenueAmountsByBucket = new Map();
+    for (const payment of recentPayments) {
+      const key = getBucketKey(payment.createdAt);
+      const amounts = revenueAmountsByBucket.get(key) || {};
+      amounts[payment.currency] = (amounts[payment.currency] || 0) + payment.amountPaid;
+      revenueAmountsByBucket.set(key, amounts);
+    }
+    const userCountsByBucket = new Map();
+    for (const account of nonAdminAccounts) {
+      if (account.createdAt < chartStart) continue;
+      const key = getBucketKey(account.createdAt);
+      userCountsByBucket.set(key, (userCountsByBucket.get(key) || 0) + 1);
+    }
+    const revenueByPeriod = chartBuckets.map(({ key, label }) => ({
+      month: key,
+      label,
+      amounts: revenueAmountsByBucket.get(key) || {},
+    }));
+    const userGrowth = chartBuckets.map(({ key, label }) => ({
+      month: key,
+      label,
+      count: userCountsByBucket.get(key) || 0,
+    }));
+    const revenueByCurrency = revenueTotals
+      .map(({ currency, _sum, _count }) => ({
+        currency,
+        amount: _sum.amountPaid || 0,
+        paymentCount: _count._all,
+      }))
+      .sort((left, right) => right.amount - left.amount);
+
+    const paidPlanKeys = new Set(
+      configuredSubscriptionPlans
+        .filter((plan) => plan.price > 0)
+        .map((plan) => plan.slug.toLowerCase())
+    );
+    const planSubscribers = Array.from(planSubscriberCounts.entries()).reduce(
+      (total, [planKey, count]) => total + (paidPlanKeys.has(planKey) ? count : 0),
+      0
+    );
     const summary = {
-      userCount: accounts.length,
+      userCount: nonAdminAccounts.length,
       documentCount,
       storageBytes: totalStorageBytes,
+      activeSubscriptions: planSubscribers,
+      revenueByCurrency,
+      revenueByPeriod,
+      userGrowth,
+      chartPeriod,
       subscriptionMetrics: {
-        freeAccounts: Math.max(accounts.length - plusSubscribers - proSubscribers, 0),
+        freeAccounts: planSubscriberCounts.get("free") || 0,
         plusSubscribers,
         proSubscribers,
-        planSubscribers: plusSubscribers + proSubscribers,
+        planSubscribers,
+        planDistribution: configuredSubscriptionPlans.map((plan) => ({
+          key: plan.slug.toLowerCase(),
+          name: plan.name,
+          subscribers: planSubscriberCounts.get(plan.slug.toLowerCase()) || 0,
+        })),
         razorpayPlusSubscribers,
         razorpayProSubscribers,
         paidSubscribers,

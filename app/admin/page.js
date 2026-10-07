@@ -1,11 +1,11 @@
-import AdminPanel from "@/components/Admin/AdminPanel";
+import AdminDashboard from "@/components/Admin/AdminDashboard";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Overview & Directory — DocVault Admin",
+  title: "Dashboard — DocVault Admin",
 };
 
 export default function AdminPage() {
-  return <AdminPanel />;
+  return <AdminDashboard />;
 }

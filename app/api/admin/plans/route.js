@@ -19,7 +19,7 @@ export async function GET() {
         billingPeriod: plan.billingPeriod,
         isActive: plan.isActive,
         isRecommended: plan.isRecommended,
-        checkoutAvailable: plan.slug !== "free" && Boolean(
+        checkoutAvailable: plan.price > 0 && Boolean(
           process.env.RAZORPAY_KEY_ID?.trim() && process.env.RAZORPAY_KEY_SECRET?.trim()
         ),
       })),

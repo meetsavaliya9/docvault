@@ -25,7 +25,7 @@ export async function GET() {
         quotaBytes: plan.storageLimitBytes,
         quotaLabel: formatStorageLimit(plan.storageLimitBytes),
         maxDocuments: plan.documentLimit,
-        checkoutAvailable: plan.slug !== "free" && checkoutConfigured,
+        checkoutAvailable: plan.price > 0 && checkoutConfigured,
       })),
       razorpayKeyId: checkoutConfigured ? getRazorpayCredentials().keyId : null,
     });

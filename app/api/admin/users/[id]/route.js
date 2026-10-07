@@ -24,13 +24,16 @@ export async function PATCH(request, { params }) {
   const hasBlockStatus = Object.hasOwn(body || {}, "isBlocked");
   const updatesBlockStatus = hasBlockStatus && typeof body.isBlocked === "boolean";
   const updatesPlan = Object.hasOwn(body || {}, "subscriptionPlan");
+  const requestedPlan = typeof body?.subscriptionPlan === "string"
+    ? body.subscriptionPlan.trim()
+    : "";
   if (
     (!updatesBlockStatus && !updatesPlan) ||
     (hasBlockStatus && !updatesBlockStatus) ||
-    (updatesPlan && !["free", "plus", "pro"].includes(body.subscriptionPlan))
+    (updatesPlan && (!requestedPlan || requestedPlan.length > 40))
   ) {
     return NextResponse.json(
-      { error: "Provide a valid isBlocked boolean or subscriptionPlan (free, plus, or pro)." },
+      { error: "Provide a valid isBlocked boolean or subscription plan slug." },
       { status: 400 }
     );
   }
@@ -53,13 +56,13 @@ export async function PATCH(request, { params }) {
     }
     const selectedPlan = updatesPlan
       ? await prisma.subscriptionPlan.findUnique({
-          where: { slug: body.subscriptionPlan.toUpperCase() },
+          where: { slug: requestedPlan },
         })
       : null;
     if (updatesPlan && !selectedPlan) {
       return NextResponse.json(
-        { error: "Subscription plan is not configured. Run the plan seed first." },
-        { status: 503 }
+        { error: "Subscription plan was not found." },
+        { status: 404 }
       );
     }
 
@@ -104,14 +107,14 @@ export async function PATCH(request, { params }) {
           },
         });
 
-        if (body.subscriptionPlan !== "free") {
+        if (selectedPlan.price > 0) {
           await tx.subscription.upsert({
             where: { stripeSubscriptionId: `admin_${targetUserId}` },
             create: {
               userId: targetUserId,
               provider: "admin",
               stripeSubscriptionId: `admin_${targetUserId}`,
-              stripePriceId: `admin_${body.subscriptionPlan}`,
+              stripePriceId: `admin_${selectedPlan.slug}`,
               planKey: selectedPlan.slug,
               planId: selectedPlan.id,
               status: "active",
@@ -120,7 +123,7 @@ export async function PATCH(request, { params }) {
             },
             update: {
               userId: targetUserId,
-              stripePriceId: `admin_${body.subscriptionPlan}`,
+              stripePriceId: `admin_${selectedPlan.slug}`,
               planKey: selectedPlan.slug,
               planId: selectedPlan.id,
               status: "active",
@@ -136,7 +139,7 @@ export async function PATCH(request, { params }) {
     return NextResponse.json({
       success: true,
       ...(updatesBlockStatus ? { isBlocked: body.isBlocked } : {}),
-      ...(updatesPlan ? { subscriptionPlan: body.subscriptionPlan } : {}),
+      ...(updatesPlan ? { subscriptionPlan: selectedPlan.slug } : {}),
       message: updatesPlan
         ? `${targetUser.email}'s plan is now ${selectedPlan.name}.`
         : body.isBlocked
