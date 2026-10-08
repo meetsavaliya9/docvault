@@ -11,7 +11,7 @@ export const metadata = {
 
 export default async function AdminLayout({ children }) {
   const admin = await getAuthenticatedAdmin();
-  if (!admin) redirect("/admin/login");
+  if (!admin) redirect("/login");
 
   return <AdminWorkspace admin={admin}>{children}</AdminWorkspace>;
 }

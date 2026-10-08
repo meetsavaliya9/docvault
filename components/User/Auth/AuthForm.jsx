@@ -53,7 +53,9 @@ export default function AuthForm({
       const clipboardText = await navigator.clipboard.readText();
       const code = clipboardText.match(/(?:^|\D)(\d{6})(?:\D|$)/)?.[1];
       if (!code) {
-        throw new Error("No 6-digit code found in clipboard. Please copy the OTP from your email.");
+        throw new Error(
+          "No 6-digit code found in clipboard. Please copy the OTP from your email.",
+        );
       }
 
       setOtpCode(code);
@@ -61,7 +63,7 @@ export default function AuthForm({
     } catch (clipboardError) {
       setError(
         clipboardError.message ||
-          "Could not read the clipboard. Copy the code from your email and enter it manually."
+          "Could not read the clipboard. Copy the code from your email and enter it manually.",
       );
     }
   }
@@ -87,7 +89,9 @@ export default function AuthForm({
 
       setCooldown(result.cooldownSeconds || 60);
       setOtpCode("");
-      setMessage(result.message || "A new 6-digit OTP has been sent to your email.");
+      setMessage(
+        result.message || "A new 6-digit OTP has been sent to your email.",
+      );
     } catch (err) {
       setError(err.message || "Could not resend OTP. Please try again.");
     } finally {
@@ -140,7 +144,9 @@ export default function AuthForm({
 
         const result = await response.json();
         if (!response.ok) {
-          throw new Error(result.error || "Verification failed. Please try again.");
+          throw new Error(
+            result.error || "Verification failed. Please try again.",
+          );
         }
 
         setMessage("Email verified successfully! Redirecting to your vault...");
@@ -172,7 +178,9 @@ export default function AuthForm({
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || "Authentication failed. Please check your details.");
+        throw new Error(
+          result.error || "Authentication failed. Please check your details.",
+        );
       }
 
       if (result.otpRequired) {
@@ -181,13 +189,15 @@ export default function AuthForm({
         setCooldown(result.cooldownSeconds || 60);
         setMessage(
           result.message ||
-            `A 6-digit verification code has been sent to ${result.email || email}. It expires in 10 minutes.`
+            `A 6-digit verification code has been sent to ${result.email || email}. It expires in 10 minutes.`,
         );
       } else {
         router.replace(result.redirectTo || "/dashboard");
       }
     } catch (authError) {
-      setError(authError.message || "An unexpected error occurred. Please try again.");
+      setError(
+        authError.message || "An unexpected error occurred. Please try again.",
+      );
     } finally {
       setPending(false);
     }
@@ -196,7 +206,10 @@ export default function AuthForm({
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8 sm:py-12">
       <section className="w-full max-w-md rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-10">
-        <Link href="/login" className="mb-8 flex items-center justify-center gap-3">
+        <Link
+          href="/login"
+          className="mb-8 flex items-center justify-center gap-3"
+        >
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25">
             <VaultIcon className="h-6 w-6" />
           </span>
@@ -210,15 +223,15 @@ export default function AuthForm({
             {otpStage
               ? "Verify your email"
               : isSignUp
-              ? "Create your account"
-              : "Welcome back"}
+                ? "Create your account"
+                : "Welcome back"}
           </h1>
           <p className="mt-2 text-sm text-slate-500">
             {otpStage
               ? `Enter the 6-digit OTP sent to ${email}`
               : isSignUp
-              ? "Sign up to access your personal document vault."
-              : "Sign in to continue. Administrators are automatically sent to the admin console."}
+                ? "Sign up to access your personal document vault."
+                : "Sign in to continue to your DocVault account."}
           </p>
         </div>
 
@@ -259,13 +272,16 @@ export default function AuthForm({
                   autoFocus
                   value={otpCode}
                   onChange={(event) =>
-                    setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                    setOtpCode(
+                      event.target.value.replace(/\D/g, "").slice(0, 6),
+                    )
                   }
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-center text-2xl font-mono font-bold tracking-[0.5em] text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                   placeholder="------"
                 />
                 <span className="mt-2 block text-xs font-normal text-slate-500">
-                  Please check your Gmail inbox (and Spam/Junk folder) for the code.
+                  Please check your Gmail inbox (and Spam/Junk folder) for the
+                  code.
                 </span>
               </label>
 
@@ -290,7 +306,10 @@ export default function AuthForm({
                 <span className="text-slate-500">
                   {cooldown > 0 ? (
                     <span>
-                      Resend OTP in <strong className="font-semibold text-slate-700">{cooldown}s</strong>
+                      Resend OTP in{" "}
+                      <strong className="font-semibold text-slate-700">
+                        {cooldown}s
+                      </strong>
                     </span>
                   ) : (
                     "Didn't receive the email?"
@@ -334,7 +353,7 @@ export default function AuthForm({
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                    placeholder="Meet Savaliya"
+                    placeholder="Full Name"
                   />
                 </label>
               )}
@@ -348,7 +367,7 @@ export default function AuthForm({
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                  placeholder="you@gmail.com"
+                  placeholder="Email Address"
                 />
               </label>
 
@@ -362,7 +381,9 @@ export default function AuthForm({
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                  placeholder={isSignUp ? "At least 8 characters" : "Your password"}
+                  placeholder={
+                    isSignUp ? "At least 8 characters" : "Your password"
+                  }
                 />
               </label>
 
@@ -392,8 +413,8 @@ export default function AuthForm({
                     ? "Sending OTP..."
                     : "Signing in..."
                   : isSignUp
-                  ? "Create Account & Send OTP"
-                  : "Continue"}
+                    ? "Create Account & Send OTP"
+                    : "Continue"}
               </button>
             </div>
           )}

@@ -10,8 +10,9 @@ export default function AdminSignOutButton() {
   const handleLogout = async () => {
     setPending(true);
     try {
-      await fetch("/api/admin/logout", { method: "POST" });
-      router.push("/admin/login");
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("Could not sign out.");
+      router.push("/login");
       router.refresh();
     } catch (err) {
       console.error("Admin sign out error:", err);

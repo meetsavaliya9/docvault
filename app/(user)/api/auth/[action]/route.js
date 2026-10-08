@@ -14,7 +14,11 @@ import {
   verifyLoginOtp,
   verifySignupOtp,
 } from "@/app/lib/auth/emailOtp";
-import { createAdminSession, isAdminEmail } from "@/lib/auth/admin";
+import {
+  createAdminSession,
+  destroyAdminSession,
+  isAdminEmail,
+} from "@/lib/auth/admin";
 import { getUserPermissions, getUserRole } from "@/lib/permissions";
 import {
   logSafeServerError,
@@ -66,6 +70,7 @@ export async function POST(request, { params }) {
 
     if (action === "logout") {
       await destroySession();
+      await destroyAdminSession();
       return NextResponse.json({ success: true });
     }
 
@@ -163,6 +168,7 @@ export async function POST(request, { params }) {
         }
 
         // Account is now created in MySQL! Create session and log the user in.
+        await destroyAdminSession();
         await createSession(result.user);
         return NextResponse.json({
           success: true,
@@ -178,6 +184,7 @@ export async function POST(request, { params }) {
         return errorResponse(result.error, result.status || 400);
       }
 
+      await destroyAdminSession();
       await createSession(result.user);
       return NextResponse.json({
         success: true,
@@ -201,6 +208,7 @@ export async function POST(request, { params }) {
       }
 
       if (isAdminEmail(email)) {
+        await destroySession();
         await createAdminSession(user);
         return NextResponse.json({
           success: true,
@@ -208,6 +216,7 @@ export async function POST(request, { params }) {
         });
       }
 
+      await destroyAdminSession();
       const otp = await sendLoginOtp(user);
       return NextResponse.json({
         success: true,
