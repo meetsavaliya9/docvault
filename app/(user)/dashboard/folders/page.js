@@ -17,6 +17,7 @@ export default function FoldersPage() {
     folders,
     documents,
     createFolder,
+    renameFolder,
     deleteFolder,
     hasPermission,
   } = useVault();
@@ -25,18 +26,46 @@ export default function FoldersPage() {
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderDesc, setNewFolderDesc] = useState("");
+  const [createFolderError, setCreateFolderError] = useState("");
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [folderToRename, setFolderToRename] = useState(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
+  const [renameFolderError, setRenameFolderError] = useState("");
+  const [isRenamingFolder, setIsRenamingFolder] = useState(false);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState(null);
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [deleteFolderError, setDeleteFolderError] = useState("");
 
-  const handleCreateFolder = (e) => {
+  const handleCreateFolder = async (e) => {
     e.preventDefault();
-    if (!newFolderName.trim()) return;
+    if (!newFolderName.trim() || isCreatingFolder) return;
+    setCreateFolderError("");
+    setIsCreatingFolder(true);
+    try {
+      await createFolder(newFolderName.trim(), newFolderDesc.trim());
+      setNewFolderName("");
+      setNewFolderDesc("");
+      setShowNewFolderModal(false);
+    } catch (error) {
+      setCreateFolderError(error.message || "Could not create this folder.");
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  };
 
-    createFolder(newFolderName.trim(), newFolderDesc.trim());
-    setNewFolderName("");
-    setNewFolderDesc("");
-    setShowNewFolderModal(false);
+  const handleRenameFolder = async (event) => {
+    event.preventDefault();
+    if (!folderToRename || isRenamingFolder) return;
+    setRenameFolderError("");
+    setIsRenamingFolder(true);
+    try {
+      await renameFolder(folderToRename.slug, renameFolderName);
+      setFolderToRename(null);
+    } catch (error) {
+      setRenameFolderError(error.message || "Could not rename this folder.");
+    } finally {
+      setIsRenamingFolder(false);
+    }
   };
 
   const handleDeleteFolder = async () => {
@@ -84,7 +113,7 @@ export default function FoldersPage() {
           </p>
         </div>
 
-        {hasPermission("CREATE_FOLDER") && <button
+        {hasPermission("CREATE_FOLDER") && hasPermission("VIEW_FOLDERS") && <button
           onClick={() => setShowNewFolderModal(true)}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/20 active:scale-95 transition-all self-start sm:self-auto cursor-pointer"
         >
@@ -135,22 +164,54 @@ export default function FoldersPage() {
             key={folder.id}
             className="relative rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 group"
           >
+            <div className="flex items-start justify-between gap-3 px-6 pt-6">
+              <div
+                className={`h-12 w-12 shrink-0 rounded-2xl ${folder.bgLight} ${folder.textColor} flex items-center justify-center font-bold text-xl shadow-xs transition-transform group-hover:scale-105`}
+              >
+                <FolderIcon className="w-6 h-6" />
+              </div>
+              <div className="flex max-w-[calc(100%-3.75rem)] flex-wrap items-center justify-end gap-1.5">
+                {canViewDocuments && (
+                  <span className="whitespace-nowrap rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold tabular-nums text-slate-500">
+                    {folder.size}
+                  </span>
+                )}
+                {hasPermission("RENAME_FOLDER") && (
+                  <button
+                    type="button"
+                    aria-label={`Rename ${folder.name} folder`}
+                    title="Rename folder"
+                    onClick={() => {
+                      setRenameFolderError("");
+                      setFolderToRename(folder);
+                      setRenameFolderName(folder.name);
+                    }}
+                    className="whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-500 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    Rename
+                  </button>
+                )}
+                {hasPermission("DELETE_FOLDER") && (
+                  <button
+                    type="button"
+                    aria-label={`Delete ${folder.name} folder`}
+                    title="Delete folder"
+                    onClick={() => {
+                      setDeleteFolderError("");
+                      setPendingDeleteFolder(folder);
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-400 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
             <Link
               href={`/dashboard/folders/${folder.slug}`}
-              className="p-6 flex flex-col justify-between group block"
+              className="group block px-6 pb-6 pt-4"
             >
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div
-                    className={`w-12 h-12 rounded-2xl ${folder.bgLight} ${folder.textColor} flex items-center justify-center font-bold text-xl shadow-xs group-hover:scale-105 transition-transform`}
-                  >
-                    <FolderIcon className="w-6 h-6" />
-                  </div>
-                  {canViewDocuments && <span className="mr-10 text-xs font-semibold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
-                    {folder.size}
-                  </span>}
-                </div>
-
                 <h3 className="font-bold text-slate-900 text-base group-hover:text-blue-600 transition-colors">
                   {folder.name}
                 </h3>
@@ -169,18 +230,6 @@ export default function FoldersPage() {
                 </span>
               </div>
             </Link>
-            {hasPermission("DELETE_FOLDER") && <button
-              type="button"
-              aria-label={`Delete ${folder.name} folder`}
-              title="Delete folder"
-              onClick={() => {
-                setDeleteFolderError("");
-                setPendingDeleteFolder(folder);
-              }}
-              className="absolute right-5 top-5 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-            >
-              <TrashIcon className="w-4 h-4" />
-            </button>}
           </article>
         ))}
       </div>
@@ -289,12 +338,14 @@ export default function FoldersPage() {
                 />
               </div>
 
+              {createFolderError && <p role="alert" className="text-xs text-rose-600">{createFolderError}</p>}
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="submit"
+                  disabled={isCreatingFolder}
                   className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold text-xs shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition-all cursor-pointer"
                 >
-                  Create Folder
+                  {isCreatingFolder ? "Creating..." : "Create Folder"}
                 </button>
                 <button
                   type="button"
@@ -306,6 +357,34 @@ export default function FoldersPage() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {folderToRename && (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isRenamingFolder) setFolderToRename(null);
+          }}
+        >
+          <section role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+            <h2 className="text-base font-bold text-slate-900">Rename folder</h2>
+            <form onSubmit={handleRenameFolder} className="mt-4 space-y-4">
+              <input
+                autoFocus
+                required
+                maxLength={255}
+                value={renameFolderName}
+                onChange={(event) => setRenameFolderName(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white"
+              />
+              {renameFolderError && <p role="alert" className="text-xs text-rose-600">{renameFolderError}</p>}
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={isRenamingFolder} onClick={() => setFolderToRename(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={isRenamingFolder} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isRenamingFolder ? "Saving..." : "Save name"}</button>
+              </div>
+            </form>
+          </section>
         </div>
       )}
     </main>

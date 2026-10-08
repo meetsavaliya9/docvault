@@ -17,6 +17,7 @@ import {
 } from "@/components/UI/Icons";
 import { FileBadge, FileIconBox } from "@/components/UI/FileBadge";
 import DeleteConfirmationDialog from "@/components/UI/DeleteConfirmationDialog";
+import DocumentManagementActions from "@/app/(user)/dashboard/components/DocumentManagementActions";
 
 export default function FolderPage({ params }) {
   const unwrappedParams = use(params);
@@ -29,11 +30,16 @@ export default function FolderPage({ params }) {
     moveToTrash,
     uploadFile,
     downloadDocument,
+    renameFolder,
     hasPermission,
   } = useVault();
 
   const [previewFile, setPreviewFile] = useState(null);
   const [pendingDeleteFile, setPendingDeleteFile] = useState(null);
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [renameError, setRenameError] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
 
   const confirmDeleteFile = () => {
     if (!pendingDeleteFile) return;
@@ -59,6 +65,47 @@ export default function FolderPage({ params }) {
     );
   }, [documents, folderSlug, currentFolder.name]);
 
+  const formatFileSize = (doc) => {
+    const bytes = Number(doc.rawBytes);
+    if (!Number.isFinite(bytes) || bytes <= 0) return doc.size || "—";
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    const unitIndex = Math.min(
+      Math.floor(Math.log(bytes) / Math.log(1024)) - 1,
+      units.length - 1
+    );
+    const amount = bytes / 1024 ** (unitIndex + 1);
+    return `${amount.toFixed(amount >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+  };
+
+  const handleRenameFolder = async (event) => {
+    event.preventDefault();
+    if (isRenaming) return;
+    setIsRenaming(true);
+    setRenameError("");
+    try {
+      await renameFolder(folderSlug, folderName);
+      setIsRenameOpen(false);
+    } catch (error) {
+      setRenameError(error.message || "Could not rename this folder.");
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  if (!hasPermission("VIEW_FOLDERS")) return null;
+  if (!folders.some((folder) => folder.slug === folderSlug)) {
+    return (
+      <main className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6 lg:p-8">
+        <h1 className="text-xl font-bold text-slate-900">Folder not found</h1>
+        <p className="text-sm text-slate-500">This folder is unavailable or does not belong to your account.</p>
+        <Link href="/dashboard/folders" className="inline-flex rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700">
+          Back to Folders
+        </Link>
+      </main>
+    );
+  }
+
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -71,24 +118,24 @@ export default function FolderPage({ params }) {
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Breadcrumb Navigation */}
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
-        <Link href="/dashboard/folders" className="hover:text-blue-600 transition-colors">
-          Folders
-        </Link>
+        <Link href="/dashboard/files" className="hover:text-blue-600 transition-colors">Documents</Link>
+        <ChevronRightIcon className="w-3.5 h-3.5 text-slate-400" />
+        <Link href="/dashboard/folders" className="hover:text-blue-600 transition-colors">Folders</Link>
         <ChevronRightIcon className="w-3.5 h-3.5 text-slate-400" />
         <span className="text-slate-800">{currentFolder.name}</span>
       </div>
 
       {/* Folder Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-blue-500/20">
             <FolderIcon className="w-7 h-7" />
           </div>
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+          <div className="min-w-0">
+            <h1 className="break-words text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
               {currentFolder.name}
             </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-400 mt-1">
               {hasPermission("VIEW_DOCUMENTS")
                 ? `${folderFiles.length} documents encrypted in this folder • ${currentFolder.description}`
                 : currentFolder.description}
@@ -96,15 +143,30 @@ export default function FolderPage({ params }) {
           </div>
         </div>
 
-        {hasPermission("UPLOAD_DOCUMENT") && <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors self-start sm:self-auto cursor-pointer">
-          <PlusIcon className="w-4 h-4" />
-          <span>Add File to Folder</span>
-          <input
-            type="file"
-            className="hidden"
-            onChange={handleFileUpload}
-          />
-        </label>}
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {hasPermission("RENAME_FOLDER") && (
+            <button
+              type="button"
+              onClick={() => {
+                setFolderName(currentFolder.name);
+                setRenameError("");
+                setIsRenameOpen(true);
+              }}
+              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-600"
+            >
+              Rename Folder
+            </button>
+          )}
+          {hasPermission("UPLOAD_DOCUMENT") && <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer">
+            <PlusIcon className="w-4 h-4" />
+            <span>Add File to Folder</span>
+            <input
+              type="file"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </label>}
+        </div>
       </div>
 
       {/* Files in Folder Table */}
@@ -119,15 +181,15 @@ export default function FolderPage({ params }) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[860px] table-fixed text-left text-xs">
             <thead className="bg-slate-50/80 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-100">
               <tr>
-                <th className="py-3 px-5">Document Name</th>
-                <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4">Size</th>
-                <th className="py-3 px-4">Modified</th>
-                <th className="py-3 px-4">Encryption</th>
-                <th className="py-3 px-5 text-right">Actions</th>
+                <th className="w-[34%] py-3 px-5">Document Name</th>
+                <th className="w-[10%] py-3 px-4">Type</th>
+                <th className="w-[10%] py-3 px-4">Size</th>
+                <th className="w-[14%] py-3 px-4">Modified</th>
+                <th className="w-[14%] py-3 px-4">Encryption</th>
+                <th className="w-[18%] py-3 px-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -148,7 +210,7 @@ export default function FolderPage({ params }) {
                       <FileIconBox type={doc.type} className="w-8 h-8" />
                       <span
                         onClick={hasPermission("VIEW_DOCUMENT_DETAILS") ? () => setPreviewFile(doc) : undefined}
-                        className={`font-semibold text-slate-800 truncate max-w-xs sm:max-w-md ${hasPermission("VIEW_DOCUMENT_DETAILS") ? "group-hover:text-blue-600 transition-colors cursor-pointer" : ""}`}
+                        className={`min-w-0 truncate font-semibold text-slate-800 ${hasPermission("VIEW_DOCUMENT_DETAILS") ? "group-hover:text-blue-600 transition-colors cursor-pointer" : ""}`}
                       >
                         {doc.name}
                       </span>
@@ -157,10 +219,10 @@ export default function FolderPage({ params }) {
                   <td className="py-3.5 px-4">
                     <FileBadge type={doc.type} />
                   </td>
-                  <td className="py-3.5 px-4 text-slate-600 font-medium">
-                    {doc.size}
+                  <td className="whitespace-nowrap py-3.5 px-4 text-slate-600 font-medium tabular-nums">
+                    {formatFileSize(doc)}
                   </td>
-                  <td className="py-3.5 px-4 text-slate-400">
+                  <td className="whitespace-nowrap py-3.5 px-4 text-slate-400">
                     {doc.modified}
                   </td>
                   <td className="py-3.5 px-4">
@@ -170,7 +232,7 @@ export default function FolderPage({ params }) {
                     </span>
                   </td>
                   <td className="py-3.5 px-5 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex flex-wrap items-center justify-end gap-1">
                       {hasPermission("VIEW_DOCUMENT_DETAILS") && <button
                         onClick={() => setPreviewFile(doc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
@@ -185,6 +247,7 @@ export default function FolderPage({ params }) {
                       >
                         <DownloadIcon className="w-4 h-4" />
                       </button>}
+                      <DocumentManagementActions document={doc} />
                       {hasPermission("DELETE_DOCUMENT") && <button
                         onClick={() => setPendingDeleteFile(doc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
@@ -225,6 +288,34 @@ export default function FolderPage({ params }) {
           </table>
         </div>
       </div>}
+
+      {isRenameOpen && (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isRenaming) setIsRenameOpen(false);
+          }}
+        >
+          <section role="dialog" aria-modal="true" aria-labelledby="rename-folder-title" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+            <h2 id="rename-folder-title" className="text-base font-bold text-slate-900">Rename folder</h2>
+            <form onSubmit={handleRenameFolder} className="mt-4 space-y-4">
+              <input
+                autoFocus
+                required
+                maxLength={255}
+                value={folderName}
+                onChange={(event) => setFolderName(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white"
+              />
+              {renameError && <p role="alert" className="text-xs text-rose-600">{renameError}</p>}
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={isRenaming} onClick={() => setIsRenameOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={isRenaming} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isRenaming ? "Saving..." : "Save name"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
 
       {/* Preview Modal */}
       {(hasPermission("VIEW_DOCUMENT_DETAILS") || hasPermission("PREVIEW_DOCUMENT")) && previewFile && (

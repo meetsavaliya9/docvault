@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { normalizeDocument } from "./documentUtils";
+import { DEFAULT_FOLDERS } from "@/lib/defaultFolders";
 
 const VaultContext = createContext(null);
 
@@ -31,49 +32,6 @@ async function readVaultResponse(response, resource) {
 
   return result;
 }
-
-const DEFAULT_FOLDERS = [
-  {
-    id: "f-1",
-    name: "Work & Contracts",
-    slug: "work",
-    description: "Client service agreements, NDA documents, and signed partner proposals.",
-    color: "blue",
-    bgLight: "bg-blue-50",
-    textColor: "text-blue-600",
-    borderColor: "border-blue-200/70",
-  },
-  {
-    id: "f-2",
-    name: "Finance & Taxes",
-    slug: "finance",
-    description: "Annual audit spreadsheets, expense statements, invoices, and quarterly tax filings.",
-    color: "emerald",
-    bgLight: "bg-emerald-50",
-    textColor: "text-emerald-600",
-    borderColor: "border-emerald-200/70",
-  },
-  {
-    id: "f-3",
-    name: "Personal Vault",
-    slug: "personal",
-    description: "Medical records, IDs, passport copies, resumes, and personal certificates.",
-    color: "purple",
-    bgLight: "bg-purple-50",
-    textColor: "text-purple-600",
-    borderColor: "border-purple-200/70",
-  },
-  {
-    id: "f-4",
-    name: "Design Assets",
-    slug: "design",
-    description: "Logos, brand guidelines, UI mockups, iconography packs, and banners.",
-    color: "amber",
-    bgLight: "bg-amber-50",
-    textColor: "text-amber-600",
-    borderColor: "border-amber-200/70",
-  },
-];
 
 export function VaultProvider({ children, userId = "", userEmail = "", userPermissions = {} }) {
   const [documents, setDocuments] = useState([]);
@@ -345,7 +303,9 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
     if (!file || !permissionEnabled(userPermissions, "UPLOAD_DOCUMENT")) return;
 
     const targetFolder =
-      folders.find((f) => f.slug === targetFolderSlug) || folders[0];
+      targetFolderSlug === "general" || targetFolderSlug === "root"
+        ? { name: "General", slug: "general" }
+        : folders.find((f) => f.slug === targetFolderSlug) || folders[0];
 
     try {
       const formData = new FormData();
@@ -533,8 +493,12 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
   };
 
   // Create a new folder
-  const createFolder = (name, description = "") => {
-    if (!name.trim() || !permissionEnabled(userPermissions, "CREATE_FOLDER")) return;
+  const createFolder = async (name, description = "") => {
+    if (
+      !name.trim() ||
+      !permissionEnabled(userPermissions, "CREATE_FOLDER") ||
+      !permissionEnabled(userPermissions, "VIEW_FOLDERS")
+    ) return;
 
     const slug = name
       .trim()
@@ -549,17 +513,67 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
     ];
     const theme = colorPalette[folders.length % colorPalette.length];
 
-    const newFolder = {
-      id: `f-${Date.now()}`,
-      name: name.trim(),
-      slug: slug,
-      description: description.trim() || "Custom folder collection.",
-      ...theme,
-    };
-
-    setFolders((prev) => [...prev, newFolder]);
+    const response = await fetch("/api/folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        slug,
+        description: description.trim() || "Custom folder collection.",
+        ...theme,
+      }),
+    });
+    const result = await readVaultResponse(response, "Create folder");
+    const newFolder = result.folder;
+    setFolders((prev) => [...prev.filter((folder) => folder.slug !== newFolder.slug), newFolder]);
     showToast(`Folder "${newFolder.name}" created!`, "success");
     return newFolder;
+  };
+
+  const renameFolder = async (slug, name) => {
+    if (!permissionEnabled(userPermissions, "RENAME_FOLDER")) {
+      throw new Error("You do not have permission to rename folders.");
+    }
+    const folder = folders.find((item) => item.slug === slug);
+    if (!folder) throw new Error("Folder not found.");
+    const newName = name.trim();
+    if (!newName || newName.length > 255) {
+      throw new Error("Folder names must contain 1 to 255 characters.");
+    }
+    const response = await fetch(`/api/folders/${encodeURIComponent(slug)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName }),
+    });
+    const result = await readVaultResponse(response, "Rename folder");
+    const renamedFolder = result.folder;
+    setFolders((prev) =>
+      prev.map((item) => item.slug === slug ? { ...item, ...renamedFolder } : item)
+    );
+    setDocuments((prev) =>
+      prev.map((document) =>
+        document.folderSlug === slug ? { ...document, folder: newName } : document
+      )
+    );
+    setTrash((prev) =>
+      prev.map((item) => {
+        const originalDoc = item.originalDoc;
+        const matchesFolder =
+          originalDoc?.folderSlug === slug ||
+          item.originalFolderSlug === slug;
+        return matchesFolder
+          ? {
+              ...item,
+              ...(item.originalFolder === folder.name ? { originalFolder: newName } : {}),
+              originalDoc: originalDoc
+                ? { ...originalDoc, folder: newName, folderSlug: slug }
+                : originalDoc,
+            }
+          : item;
+      })
+    );
+    showToast(`Folder renamed to "${newName}".`, "success");
+    return renamedFolder;
   };
 
   // Delete a folder and move its documents to General
@@ -589,6 +603,24 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
           : d
       )
     );
+    setTrash((prev) =>
+      prev.map((item) => {
+        const originalDoc = item.originalDoc;
+        const matchesFolder =
+          originalDoc?.folderSlug === folderToDelete.slug ||
+          item.originalFolderSlug === folderToDelete.slug;
+        return matchesFolder
+          ? {
+              ...item,
+              originalFolder: "General",
+              originalFolderSlug: "general",
+              originalDoc: originalDoc
+                ? { ...originalDoc, folder: "General", folderSlug: "general" }
+                : originalDoc,
+            }
+          : item;
+      })
+    );
     showToast(`Folder "${folderToDelete.name}" deleted. Its documents were moved to General.`, "info");
     return true;
   };
@@ -596,34 +628,67 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
   // Move a document to a different folder
   const moveDocument = async (docId, newFolderSlug, newFolderName) => {
     if (!permissionEnabled(userPermissions, "MOVE_DOCUMENT")) return;
-    const doc = documents.find((d) => String(d.id) === String(docId));
+    const doc = documents.find((d) => String(d.id) === String(docId)    );
     if (!doc) return;
-
-    setDocuments((prev) =>
-      prev.map((d) =>
-        String(d.id) === String(docId)
-          ? { ...d, folder: newFolderName, folderSlug: newFolderSlug }
-          : d
-      )
-    );
+    const isRoot = newFolderSlug === "general" || newFolderSlug === "root";
+    const destination = isRoot
+      ? { name: "General", slug: "general" }
+      : folders.find((folder) => folder.slug === newFolderSlug);
+    if (!destination) throw new Error("Destination folder not found.");
 
     try {
       const response = await fetch(`/api/documents/${encodeURIComponent(docId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder: newFolderName, folderSlug: newFolderSlug }),
+        body: JSON.stringify({
+          folder: destination.name || newFolderName,
+          folderSlug: destination.slug,
+        }),
       });
-      if (!response.ok) {
-        throw new Error("Could not update document folder in MySQL.");
-      }
-      showToast(`Moved "${doc.name}" to ${newFolderName}`, "success");
+      const result = await readVaultResponse(response, "Move document");
+      const movedDocument = normalizeDocument(result.document);
+      setDocuments((prev) =>
+        prev.map((item) => String(item.id) === String(docId) ? movedDocument : item)
+      );
+      showToast(`Moved "${doc.name}" to ${destination.name}`, "success");
     } catch (err) {
       console.error("Failed to move document:", err);
-      setDocuments((prev) =>
-        prev.map((d) => (String(d.id) === String(docId) ? doc : d))
-      );
       showToast(err.message || "Failed to move document", "warning");
+      throw err;
     }
+  };
+
+  const renameDocument = async (docId, name) => {
+    if (!permissionEnabled(userPermissions, "RENAME_DOCUMENT")) {
+      throw new Error("You do not have permission to rename documents.");
+    }
+    const newName = name.trim();
+    if (!newName || newName.length > 255) {
+      throw new Error("Document names must contain 1 to 255 characters.");
+    }
+    const response = await fetch(`/api/documents/${encodeURIComponent(docId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName }),
+    });
+    const result = await readVaultResponse(response, "Rename document");
+    const renamedDocument = normalizeDocument(result.document);
+    setDocuments((prev) =>
+      prev.map((document) => String(document.id) === String(docId) ? renamedDocument : document)
+    );
+    setTrash((prev) =>
+      prev.map((item) =>
+        String(item.originalDoc?.id) === String(docId)
+          ? {
+              ...item,
+              name: newName,
+              originalDoc: { ...item.originalDoc, name: newName },
+            }
+          : item
+      )
+    );
+    showToast(`Renamed document to "${newName}".`, "success");
+    return renamedDocument;
   };
 
   // Real download trigger
@@ -735,8 +800,10 @@ All permissions and cryptographic checks passed.`;
     deletePermanently,
     emptyTrash,
     createFolder,
+    renameFolder,
     deleteFolder,
     moveDocument,
+    renameDocument,
     downloadDocument,
     isCommandPaletteOpen,
     setIsCommandPaletteOpen,

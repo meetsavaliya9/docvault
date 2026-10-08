@@ -4,6 +4,8 @@ import { mapDocument } from "@/app/lib/documents";
 import { deletePrivateAsset } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
+import { parseJsonText } from "@/lib/jsonText";
+import { ensureUserFolders } from "@/lib/userFolders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,19 +33,60 @@ export async function PATCH(request, { params }) {
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400, headers: NO_CACHE_HEADERS });
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Request body must be a JSON object." }, { status: 400, headers: NO_CACHE_HEADERS });
+  }
 
   const data = {};
   if (typeof body.starred === "boolean") {
     data.starred = body.starred;
   }
-  if (typeof body.folder === "string" && body.folder.trim()) {
-    data.folder = body.folder.trim().slice(0, 255);
+  const hasFolder = Object.hasOwn(body, "folder");
+  const hasFolderSlug = Object.hasOwn(body, "folderSlug");
+  if (hasFolder !== hasFolderSlug) {
+    return NextResponse.json(
+      { error: "Both folder and folderSlug are required when moving a document." },
+      { status: 400, headers: NO_CACHE_HEADERS }
+    );
   }
-  if (typeof body.folderSlug === "string" && body.folderSlug.trim()) {
-    data.folderSlug = body.folderSlug.trim().slice(0, 120);
+  if (hasFolder) {
+    if (!(await hasPermission(user, "MOVE_DOCUMENT"))) {
+      return NextResponse.json({ error: "You do not have permission to move documents." }, { status: 403, headers: NO_CACHE_HEADERS });
+    }
+    if (!(await hasPermission(user, "VIEW_FOLDERS"))) {
+      return NextResponse.json({ error: "You do not have permission to view folders." }, { status: 403, headers: NO_CACHE_HEADERS });
+    }
+    if (typeof body.folder !== "string" || typeof body.folderSlug !== "string") {
+      return NextResponse.json({ error: "The destination folder is invalid." }, { status: 400, headers: NO_CACHE_HEADERS });
+    }
+
+    const requestedSlug = body.folderSlug.trim().toLowerCase();
+    if (requestedSlug === "root" || requestedSlug === "general") {
+      data.folder = "General";
+      data.folderSlug = "general";
+    } else {
+      const folders = await ensureUserFolders(user.id);
+      const destination = folders.find((folder) => folder.slug === requestedSlug);
+      if (!destination) {
+        return NextResponse.json({ error: "Destination folder not found." }, { status: 404, headers: NO_CACHE_HEADERS });
+      }
+      const folderData = parseJsonText(destination.data, {});
+      data.folder = typeof folderData.name === "string" ? folderData.name : body.folder.trim();
+      data.folderSlug = destination.slug;
+    }
   }
-  if (typeof body.name === "string" && body.name.trim()) {
-    data.name = body.name.trim().slice(0, 255);
+  if (Object.hasOwn(body, "name")) {
+    if (
+      typeof body.name !== "string" ||
+      !body.name.trim() ||
+      body.name.trim().length > 255
+    ) {
+      return NextResponse.json(
+        { error: "Document names must contain 1 to 255 characters." },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
+    }
+    data.name = body.name.trim();
   }
 
   if (Object.keys(data).length === 0) {
@@ -66,6 +109,14 @@ export async function PATCH(request, { params }) {
   }
 
   try {
+    const existing = await prisma.document.findFirst({
+      where: { id, userId: user.id },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Document not found." }, { status: 404, headers: NO_CACHE_HEADERS });
+    }
+
     const updated = await prisma.document.updateMany({
       where: { id, userId: user.id },
       data,

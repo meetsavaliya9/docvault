@@ -9,6 +9,7 @@ import {
 } from "@/lib/subscriptionPlans";
 import { getRazorpayClient, getRazorpayCredentials } from "@/lib/razorpay";
 import { hasPermission } from "@/lib/permissions";
+import { logSafeServerError } from "@/lib/auth/errorDiagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,6 +85,7 @@ export async function POST(request) {
 
     await prisma.payment.create({
       data: {
+        id: randomUUID(),
         userId: user.id,
         planId: plan.id,
         plan: plan.slug.toUpperCase(),
@@ -94,6 +96,7 @@ export async function POST(request) {
         amountPaid: plan.price,
         currency: plan.currency,
         status: "PENDING",
+        updatedAt: new Date(),
       },
     });
 
@@ -110,7 +113,7 @@ export async function POST(request) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
-    console.error("Failed to create Razorpay order:", error);
+    logSafeServerError("Failed to create Razorpay order", error);
     return NextResponse.json(
       { error: "Could not start payment. Please try again." },
       { status: 503 }

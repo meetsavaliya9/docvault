@@ -126,6 +126,7 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
     prisma.emailVerification.upsert({
       where: { email: normalizedEmail },
       create: {
+        id: randomUUID(),
         email: normalizedEmail,
         name: name.trim(),
         passwordHash,
@@ -133,6 +134,7 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
         expiresAt,
         attempts: 0,
         lastSentAt: new Date(),
+        updatedAt: new Date(),
       },
       update: {
         name: name.trim(),
@@ -141,6 +143,7 @@ export async function sendSignupOtp({ name, email, password, confirmPassword }) 
         expiresAt,
         attempts: 0,
         lastSentAt: new Date(),
+        updatedAt: new Date(),
       },
     }),
     { secrets: [...diagnosticSecrets, passwordHash, otp, otpHash] }
@@ -363,11 +366,13 @@ export async function verifySignupOtp(email, code) {
               },
               subscriptions: {
                 create: {
+                  id: randomUUID(),
                   provider: "internal",
                   planKey: "FREE",
                   planId: "FREE",
                   status: "active",
                   startDate: new Date(),
+                  updatedAt: new Date(),
                 },
               },
             },
@@ -406,6 +411,7 @@ export async function sendLoginOtp(user) {
   await prisma.otpChallenge.deleteMany({ where: { userId: user.id } });
   const challenge = await prisma.otpChallenge.create({
     data: {
+      id: randomUUID(),
       userId: user.id,
       codeHash: hashOtp(user.email, code),
       expiresAt,

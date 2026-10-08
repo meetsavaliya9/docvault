@@ -36,8 +36,20 @@ export async function PATCH(request, { params }) {
       { status: 400, headers: NO_CACHE_HEADERS }
     );
   }
-  if (typeof body?.name === "string" && !(await hasPermission(user, "RENAME_FOLDER"))) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json(
+      { error: "Request body must be a JSON object." },
+      { status: 400, headers: NO_CACHE_HEADERS }
+    );
+  }
+  if (!(await hasPermission(user, "RENAME_FOLDER"))) {
     return NextResponse.json({ error: "You do not have permission to rename folders." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
+  if (Object.hasOwn(body, "name") && (typeof body.name !== "string" || !body.name.trim() || body.name.trim().length > 255)) {
+    return NextResponse.json(
+      { error: "Folder names must contain 1 to 255 characters." },
+      { status: 400, headers: NO_CACHE_HEADERS }
+    );
   }
 
   try {
@@ -59,17 +71,67 @@ export async function PATCH(request, { params }) {
     const currentData = parseJsonText(existing.data, {});
     const updatedData = {
       ...currentData,
-      ...(body.name ? { name: body.name.trim() } : {}),
-      ...(body.description !== undefined ? { description: body.description.trim() } : {}),
-      ...(body.color ? { color: body.color } : {}),
-      ...(body.bgLight ? { bgLight: body.bgLight } : {}),
-      ...(body.textColor ? { textColor: body.textColor } : {}),
-      ...(body.borderColor ? { borderColor: body.borderColor } : {}),
+      id: currentData.id || existing.id,
+      slug: existing.slug,
+      ...(Object.hasOwn(body, "name") ? { name: body.name.trim() } : {}),
+      ...(typeof body.description === "string" ? { description: body.description.trim().slice(0, 500) } : {}),
+      ...(typeof body.color === "string" ? { color: body.color } : {}),
+      ...(typeof body.bgLight === "string" ? { bgLight: body.bgLight } : {}),
+      ...(typeof body.textColor === "string" ? { textColor: body.textColor } : {}),
+      ...(typeof body.borderColor === "string" ? { borderColor: body.borderColor } : {}),
     };
 
-    const updated = await prisma.folder.update({
-      where: { id: existing.id },
-      data: { data: stringifyJsonText(updatedData) },
+    await prisma.$transaction(async (transaction) => {
+      await transaction.folder.update({
+        where: { id: existing.id },
+        data: { data: stringifyJsonText(updatedData) },
+      });
+
+      if (typeof currentData.name === "string" && updatedData.name !== currentData.name) {
+        await transaction.document.updateMany({
+          where: {
+            userId: user.id,
+            OR: [
+              { folderSlug: existing.slug },
+              { folder: currentData.name },
+            ],
+          },
+          data: { folder: updatedData.name },
+        });
+
+        const trashItems = await transaction.trashItem.findMany({
+          where: { userId: user.id },
+          select: { id: true, data: true },
+        });
+        for (const trashItem of trashItems) {
+          const item = parseJsonText(trashItem.data, {});
+          const originalDoc = item?.originalDoc;
+          if (!originalDoc) continue;
+          const matchesFolder =
+            originalDoc.folderSlug === existing.slug ||
+            originalDoc.folder === currentData.name ||
+            item.originalFolderSlug === existing.slug ||
+            item.originalFolderName === currentData.name;
+          if (!matchesFolder) continue;
+
+          const updatedItem = {
+            ...item,
+            ...(item.originalFolder === currentData.name
+              ? { originalFolder: updatedData.name }
+              : {}),
+            ...(item.originalFolderName === currentData.name ? { originalFolderName: updatedData.name } : {}),
+            originalDoc: {
+              ...originalDoc,
+              folder: updatedData.name,
+              folderSlug: existing.slug,
+            },
+          };
+          await transaction.trashItem.updateMany({
+            where: { id: trashItem.id, userId: user.id },
+            data: { data: stringifyJsonText(updatedItem) },
+          });
+        }
+      }
     });
 
     return NextResponse.json(
@@ -113,24 +175,53 @@ export async function DELETE(_request, { params }) {
       );
     }
 
-    await prisma.$transaction([
-      prisma.folder.deleteMany({
+    const currentData = parseJsonText(existing.data, {});
+    await prisma.$transaction(async (transaction) => {
+      await transaction.folder.deleteMany({
         where: { id: existing.id, userId: user.id },
-      }),
-      prisma.document.updateMany({
+      });
+      await transaction.document.updateMany({
         where: {
           userId: user.id,
           OR: [
             { folderSlug: existing.slug },
-            { folder: typeof parseJsonText(existing.data, {})?.name === "string" ? parseJsonText(existing.data, {}).name : "" },
+            ...(typeof currentData.name === "string" ? [{ folder: currentData.name }] : []),
           ],
         },
         data: {
           folder: "General",
           folderSlug: "general",
         },
-      }),
-    ]);
+      });
+      const trashItems = await transaction.trashItem.findMany({
+        where: { userId: user.id },
+        select: { id: true, data: true },
+      });
+      for (const trashItem of trashItems) {
+        const item = parseJsonText(trashItem.data, {});
+        const originalDoc = item?.originalDoc;
+        if (
+          !originalDoc ||
+          (originalDoc.folderSlug !== existing.slug &&
+            originalDoc.folder !== currentData.name &&
+            item.originalFolderSlug !== existing.slug)
+        ) {
+          continue;
+        }
+        await transaction.trashItem.updateMany({
+          where: { id: trashItem.id, userId: user.id },
+          data: {
+            data: stringifyJsonText({
+              ...item,
+              originalFolder: "General",
+              originalFolderName: "General",
+              originalFolderSlug: "general",
+              originalDoc: { ...originalDoc, folder: "General", folderSlug: "general" },
+            }),
+          },
+        });
+      }
+    });
 
     return NextResponse.json(
       { success: true },

@@ -14,6 +14,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { parseJsonText } from "@/lib/jsonText";
+import { logSafeServerError } from "@/lib/auth/errorDiagnostics";
+import { ensureUserFolders } from "@/lib/userFolders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +58,16 @@ export async function GET(request) {
   if ((starred === "true" || (folderSlug && folderSlug !== "all")) && !(await hasPermission(user, "FILTER_DOCUMENTS"))) {
     return NextResponse.json({ error: "You do not have permission to filter documents." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
+  const requestedFolderSlug = folderSlug?.trim().toLowerCase();
+  const isRootFolderFilter = requestedFolderSlug === "general" || requestedFolderSlug === "root";
+  if (
+    requestedFolderSlug &&
+    requestedFolderSlug !== "all" &&
+    !isRootFolderFilter &&
+    !(await hasPermission(user, "VIEW_FOLDERS"))
+  ) {
+    return NextResponse.json({ error: "You do not have permission to view folders." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
 
   const where = {
     userId: user.id,
@@ -66,7 +78,7 @@ export async function GET(request) {
     where.starred = true;
   }
   if (folderSlug && folderSlug !== "all") {
-    where.folderSlug = folderSlug;
+    where.folderSlug = isRootFolderFilter ? "general" : requestedFolderSlug;
   }
   if (search && search.trim()) {
     const q = search.trim();
@@ -78,6 +90,13 @@ export async function GET(request) {
   }
 
   try {
+    if (requestedFolderSlug && requestedFolderSlug !== "all" && !isRootFolderFilter) {
+      const folders = await ensureUserFolders(user.id);
+      if (!folders.some((folder) => folder.slug === requestedFolderSlug)) {
+        return NextResponse.json({ error: "Folder not found." }, { status: 404, headers: NO_CACHE_HEADERS });
+      }
+    }
+
     const [documents, legacyMedia] = await Promise.all([
       prisma.document.findMany({
         where,
@@ -252,16 +271,62 @@ export async function POST(request) {
       );
     }
 
+    if (isFileUpload) {
+      const requestedFolderSlug = String(fields.folderSlug || "general").trim().toLowerCase();
+      if (requestedFolderSlug === "general" || requestedFolderSlug === "root") {
+        fields.folder = "General";
+        fields.folderSlug = "general";
+      } else {
+        if (!(await hasPermission(user, "VIEW_FOLDERS"))) {
+          return NextResponse.json(
+            { error: "You do not have permission to select a folder." },
+            { status: 403 }
+          );
+        }
+        const folders = await ensureUserFolders(user.id);
+        const destination = folders.find((folder) => folder.slug === requestedFolderSlug);
+        if (!destination) {
+          return NextResponse.json(
+            { error: "The selected folder was not found." },
+            { status: 404 }
+          );
+        }
+        const folderData = parseJsonText(destination.data, {});
+        fields.folder =
+          typeof folderData.name === "string" ? folderData.name : String(fields.folder || "");
+        fields.folderSlug = destination.slug;
+      }
+    }
+
     if (!isFileUpload) {
       const trashedDocuments = await prisma.trashItem.findMany({
         where: { userId: user.id },
         select: { data: true },
       });
-      const isRestoringOwnedTrash = trashedDocuments.some(
-        (item) => String(parseJsonText(item.data, {})?.originalDoc?.id) === String(fields.id)
-      );
-      if (!isRestoringOwnedTrash) {
+      const ownedTrashItem = trashedDocuments
+        .map((item) => parseJsonText(item.data, {}))
+        .find((item) => String(item?.originalDoc?.id) === String(fields.id));
+      if (!ownedTrashItem) {
         return NextResponse.json({ error: "Only a document in your Trash can be restored." }, { status: 403 });
+      }
+      const requestedFolderSlug = String(fields.folderSlug || "general").trim().toLowerCase();
+      if (requestedFolderSlug === "general" || requestedFolderSlug === "root") {
+        fields.folder = "General";
+        fields.folderSlug = "general";
+      } else if (!(await hasPermission(user, "VIEW_FOLDERS"))) {
+        fields.folder = "General";
+        fields.folderSlug = "general";
+      } else {
+        const folders = await ensureUserFolders(user.id);
+        const destination = folders.find((folder) => folder.slug === requestedFolderSlug);
+        if (destination) {
+          const folderData = parseJsonText(destination.data, {});
+          fields.folder = typeof folderData.name === "string" ? folderData.name : "General";
+          fields.folderSlug = destination.slug;
+        } else {
+          fields.folder = "General";
+          fields.folderSlug = "general";
+        }
       }
     }
 
@@ -300,11 +365,14 @@ export async function POST(request) {
         cloudinaryVersion:
           cloudinaryAsset?.version || fields.cloudinaryVersion || null,
         createdAt,
+        updatedAt: new Date(),
     });
 
     return NextResponse.json({ document: mapDocument(document) }, { status: 201 });
   } catch (error) {
-    console.error("Failed to create document in MySQL:", error);
+    logSafeServerError("Failed to create document in MySQL", error, {
+      secrets: [user.id, uploadFilename, cloudinaryAsset?.public_id].filter(Boolean),
+    });
     if (cloudinaryAsset) {
       try {
         await deletePrivateAsset(
@@ -312,7 +380,11 @@ export async function POST(request) {
           cloudinaryAsset.resource_type
         );
       } catch (cleanupError) {
-        console.error("Could not clean up Cloudinary asset after database failure:", cleanupError);
+        logSafeServerError(
+          "Could not clean up Cloudinary asset after database failure",
+          cleanupError,
+          { secrets: [user.id, uploadFilename, cloudinaryAsset.public_id].filter(Boolean) }
+        );
       }
     }
 

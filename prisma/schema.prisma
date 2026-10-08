@@ -31,7 +31,7 @@ model Document {
 
   @@index([userId, createdAt], map: "Document_userId_createdAt_idx")
   @@index([userId, folderSlug], map: "Document_userId_folderSlug_idx")
-  @@map("document")
+  @@map("Document")
 }
 
 model EmailVerification {
@@ -48,7 +48,7 @@ model EmailVerification {
 
   @@index([email], map: "EmailVerification_email_idx")
   @@index([expiresAt], map: "EmailVerification_expiresAt_idx")
-  @@map("emailverification")
+  @@map("EmailVerification")
 }
 
 model Folder {
@@ -59,7 +59,7 @@ model Folder {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Folder_userId_fkey")
 
   @@unique([userId, slug], map: "Folder_userId_slug_key")
-  @@map("folder")
+  @@map("Folder")
 }
 
 model OtpChallenge {
@@ -73,7 +73,7 @@ model OtpChallenge {
 
   @@index([expiresAt], map: "OtpChallenge_expiresAt_idx")
   @@index([userId, createdAt], map: "OtpChallenge_userId_createdAt_idx")
-  @@map("otpchallenge")
+  @@map("OtpChallenge")
 }
 
 model Payment {
@@ -102,7 +102,7 @@ model Payment {
   @@index([planId], map: "Payment_planId_idx")
   @@index([subscriptionId], map: "Payment_subscriptionId_idx")
   @@index([userId, status], map: "Payment_userId_status_idx")
-  @@map("payment")
+  @@map("Payment")
 }
 
 model PaymentRefund {
@@ -118,7 +118,7 @@ model PaymentRefund {
   payment          Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade, map: "PaymentRefund_paymentId_fkey")
 
   @@index([paymentId, status], map: "PaymentRefund_paymentId_status_idx")
-  @@map("paymentrefund")
+  @@map("PaymentRefund")
 }
 
 model RazorpayPlan {
@@ -128,7 +128,7 @@ model RazorpayPlan {
   createdAt      DateTime @default(now())
 
   @@index([planKey], map: "RazorpayPlan_planKey_idx")
-  @@map("razorpayplan")
+  @@map("RazorpayPlan")
 }
 
 model Session {
@@ -141,7 +141,7 @@ model Session {
 
   @@index([expiresAt], map: "Session_expiresAt_idx")
   @@index([userId], map: "Session_userId_idx")
-  @@map("session")
+  @@map("Session")
 }
 
 model Subscription {
@@ -166,7 +166,7 @@ model Subscription {
   @@index([planId], map: "Subscription_planId_fkey")
   @@index([userId, planKey, endDate], map: "Subscription_userId_planKey_endDate_idx")
   @@index([userId, status], map: "Subscription_userId_status_idx")
-  @@map("subscription")
+  @@map("Subscription")
 }
 
 model SubscriptionPlan {
@@ -190,7 +190,7 @@ model SubscriptionPlan {
   subscriptions     Subscription[]
 
   @@index([isActive, displayOrder], map: "SubscriptionPlan_isActive_displayOrder_idx")
-  @@map("subscriptionplan")
+  @@map("SubscriptionPlan")
 }
 
 model SubscriptionPlanPricing {
@@ -198,7 +198,7 @@ model SubscriptionPlanPricing {
   amount         Int
   updatedAt      DateTime
   razorpayPlanId String?  @db.VarChar(255)
-  @@map("subscriptionplanpricing")
+  @@map("SubscriptionPlanPricing")
 }
 
 model TrashItem {
@@ -208,7 +208,7 @@ model TrashItem {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "TrashItem_userId_fkey")
 
   @@index([userId], map: "TrashItem_userId_idx")
-  @@map("trashitem")
+  @@map("TrashItem")
 }
 
 model User {
@@ -228,7 +228,7 @@ model User {
   trashItems       TrashItem[]
   userPermissions  UserPermission[]
 
-  @@map("user")
+  @@map("User")
 }
 
 model UserPermission {

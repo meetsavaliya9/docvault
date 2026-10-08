@@ -20,6 +20,7 @@ import {
 } from "@/components/UI/Icons";
 import { FileBadge, FileIconBox } from "@/components/UI/FileBadge";
 import DeleteConfirmationDialog from "@/components/UI/DeleteConfirmationDialog";
+import DocumentManagementActions from "@/app/(user)/dashboard/components/DocumentManagementActions";
 
 export default function FilesPage() {
   const {
@@ -29,6 +30,7 @@ export default function FilesPage() {
     moveToTrash,
     uploadFile,
     downloadDocument,
+    createFolder,
     hasPermission,
   } = useVault();
 
@@ -41,6 +43,11 @@ export default function FilesPage() {
   const [pendingDeleteFile, setPendingDeleteFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [targetFolderSlug, setTargetFolderSlug] = useState("work");
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderDescription, setNewFolderDescription] = useState("");
+  const [newFolderError, setNewFolderError] = useState("");
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const canViewDocuments = hasPermission("VIEW_DOCUMENTS");
   const canSearchDocuments = hasPermission("SEARCH_DOCUMENTS");
   const canSearchByName = hasPermission("SEARCH_BY_NAME");
@@ -55,6 +62,23 @@ export default function FilesPage() {
       setViewFile(null);
     }
     setPendingDeleteFile(null);
+  };
+
+  const handleCreateFolder = async (event) => {
+    event.preventDefault();
+    if (!newFolderName.trim() || isCreatingFolder) return;
+    setIsCreatingFolder(true);
+    setNewFolderError("");
+    try {
+      await createFolder(newFolderName.trim(), newFolderDescription.trim());
+      setNewFolderName("");
+      setNewFolderDescription("");
+      setShowNewFolderModal(false);
+    } catch (error) {
+      setNewFolderError(error.message || "Could not create this folder.");
+    } finally {
+      setIsCreatingFolder(false);
+    }
   };
 
   // File Upload Handlers
@@ -139,7 +163,21 @@ export default function FilesPage() {
         </div>
 
         {/* Upload Action with Folder Picker */}
-        {hasPermission("UPLOAD_DOCUMENT") && <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {hasPermission("CREATE_FOLDER") && hasPermission("VIEW_FOLDERS") && (
+            <button
+              type="button"
+              onClick={() => {
+                setNewFolderError("");
+                setShowNewFolderModal(true);
+              }}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:border-blue-300 hover:text-blue-600"
+            >
+              <PlusIcon className="h-4 w-4" />
+              New Folder
+            </button>
+          )}
+          {hasPermission("UPLOAD_DOCUMENT") && <>
           {hasPermission("VIEW_FOLDERS") && (
           <select
             value={targetFolderSlug}
@@ -147,6 +185,7 @@ export default function FilesPage() {
             className="flex-1 sm:flex-none text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl px-3 py-2.5 outline-none shadow-xs cursor-pointer hover:border-slate-300 max-w-[160px] sm:max-w-none truncate"
             title="Select target folder for upload"
           >
+            <option value="general">General (Root)</option>
             {folders.map((f) => (
               <option key={f.id} value={f.slug}>
                 📁 {f.name}
@@ -164,7 +203,8 @@ export default function FilesPage() {
               onChange={handleFileUpload}
             />
           </label>
-        </div>}
+          </>}
+        </div>
       </div>
 
       {/* Drag & Drop Zone */}
@@ -248,6 +288,7 @@ export default function FilesPage() {
             className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer hover:border-slate-300 max-w-[130px] sm:max-w-none truncate"
           >
             <option value="all">All Folders</option>
+            <option value="general">General (Root)</option>
             {folders.map((f) => (
               <option key={f.id} value={f.slug}>
                 {f.name}
@@ -365,6 +406,7 @@ export default function FilesPage() {
                   >
                     <DownloadIcon className="w-4 h-4" />
                   </button>}
+                  <DocumentManagementActions document={doc} />
                   {hasPermission("DELETE_DOCUMENT") && <button
                     onClick={() => setPendingDeleteFile(doc)}
                     className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
@@ -472,6 +514,7 @@ export default function FilesPage() {
                         >
                           <DownloadIcon className="w-4 h-4" />
                         </button>}
+                        <DocumentManagementActions document={doc} />
                         {hasPermission("DELETE_DOCUMENT") && <button
                           onClick={() => setPendingDeleteFile(doc)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
@@ -621,6 +664,46 @@ export default function FilesPage() {
         onCancel={() => setPendingDeleteFile(null)}
         onConfirm={confirmDeleteFile}
       />
+      {showNewFolderModal && (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isCreatingFolder) setShowNewFolderModal(false);
+          }}
+        >
+          <section role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+            <h2 className="text-base font-bold text-slate-900">Create New Folder</h2>
+            <form onSubmit={handleCreateFolder} className="mt-4 space-y-4">
+              <label className="block text-xs font-semibold text-slate-700">
+                Folder name
+                <input
+                  autoFocus
+                  required
+                  maxLength={255}
+                  value={newFolderName}
+                  onChange={(event) => setNewFolderName(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-slate-700">
+                Description (optional)
+                <textarea
+                  rows={3}
+                  maxLength={500}
+                  value={newFolderDescription}
+                  onChange={(event) => setNewFolderDescription(event.target.value)}
+                  className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </label>
+              {newFolderError && <p role="alert" className="text-xs text-rose-600">{newFolderError}</p>}
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={isCreatingFolder} onClick={() => setShowNewFolderModal(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={isCreatingFolder} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isCreatingFolder ? "Creating..." : "Create Folder"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

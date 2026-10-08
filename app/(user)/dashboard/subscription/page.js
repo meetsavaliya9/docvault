@@ -29,6 +29,17 @@ function formatDate(value) {
     : "—";
 }
 
+async function readPaymentResponse(response) {
+  try {
+    const result = await response.json();
+    return result && typeof result === "object" && !Array.isArray(result)
+      ? result
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadRazorpayCheckout() {
   if (window.Razorpay) return Promise.resolve();
   return new Promise((resolve, reject) => {
@@ -180,9 +191,19 @@ export default function SubscriptionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planId: plan.id }),
       });
-      const orderData = await orderResponse.json();
+      const orderData = await readPaymentResponse(orderResponse);
       if (!orderResponse.ok) {
-        throw new Error(orderData.error || "Could not start payment.");
+        throw new Error(
+          orderData?.error ||
+            `Could not start payment (HTTP ${orderResponse.status}). Please try again.`
+        );
+      }
+      if (
+        typeof orderData?.orderId !== "string" ||
+        !Number.isSafeInteger(orderData.amount) ||
+        typeof orderData.currency !== "string"
+      ) {
+        throw new Error("Payment service returned an invalid order response.");
       }
 
       setBusy(`processing:${plan.key}`);
@@ -215,11 +236,11 @@ export default function SubscriptionPage() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(checkoutResult),
             });
-            const verifyResult = await verifyResponse.json();
-            if (!verifyResponse.ok || !verifyResult.success) {
+            const verifyResult = await readPaymentResponse(verifyResponse);
+            if (!verifyResponse.ok || !verifyResult?.success) {
               throw new Error(
-                verifyResult.error ||
-                  "Payment verification failed. Your subscription has not been activated."
+                verifyResult?.error ||
+                  `Payment verification failed (HTTP ${verifyResponse.status}). Your subscription has not been activated.`
               );
             }
             setPaymentSuccess(verifyResult);

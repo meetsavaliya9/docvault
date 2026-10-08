@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSubscriptionPlanById } from "@/lib/subscriptionPlans";
 import { getRazorpayClient, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 import { hasPermission } from "@/lib/permissions";
+import { logSafeServerError } from "@/lib/auth/errorDiagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -119,7 +120,7 @@ export async function POST(request) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
-    console.error("Razorpay payment verification failed:", error);
+    logSafeServerError("Razorpay payment verification failed", error);
     return NextResponse.json(
       { error: "Payment verification failed. Your subscription has not been activated." },
       { status: 400 }

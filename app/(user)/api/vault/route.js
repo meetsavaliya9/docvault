@@ -4,6 +4,7 @@ import { deletePrivateAsset } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { parseJsonText, stringifyJsonText } from "@/lib/jsonText";
+import { ensureUserFolders } from "@/lib/userFolders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,7 +80,7 @@ export async function GET() {
     ]);
     const [folders, trash] = await Promise.all([
       canViewFolders
-        ? prisma.folder.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } })
+        ? ensureUserFolders(user.id)
         : Promise.resolve([]),
       canViewTrash
         ? prisma.trashItem.findMany({ where: { userId: user.id }, orderBy: { id: "desc" } })

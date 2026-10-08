@@ -94,10 +94,12 @@ export async function createAccount(email, passwordOrHash, name = null, isPreHas
         },
         subscriptions: {
           create: {
+            id: randomUUID(),
             provider: "internal",
             planKey: "FREE",
             status: "active",
             startDate: new Date(),
+            updatedAt: new Date(),
           },
         },
       },
