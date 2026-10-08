@@ -1,6 +1,9 @@
 import { requirePagePermission } from "@/lib/permissions";
+import PermissionDenied from "@/components/User/UI/PermissionDenied";
 
 export default async function SubscriptionLayout({ children }) {
-  await requirePagePermission("VIEW_SUBSCRIPTION");
-  return children;
+  const allowed = await requirePagePermission("VIEW_SUBSCRIPTION");
+  return allowed
+    ? children
+    : <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><PermissionDenied permission="VIEW_SUBSCRIPTION" /></main>;
 }

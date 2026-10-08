@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { isAdminEmail, requireAdmin } from "@/lib/auth/admin";
-import { DEFAULT_USER_PERMISSIONS, PERMISSIONS, createPermissionMap } from "@/lib/permissionConstants";
+import {
+  applyPermissionDependencies,
+  DEFAULT_USER_PERMISSIONS,
+  PERMISSION_DEPENDENCIES,
+  PERMISSIONS,
+  createPermissionMap,
+} from "@/lib/permissionConstants";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -79,7 +85,12 @@ export async function GET(_request, { params }) {
     for (const record of records) {
       permissions[record.permission] = record.enabled;
     }
-    return NextResponse.json({ success: true, userId: user.id, role: "USER", permissions }, {
+    return NextResponse.json({
+      success: true,
+      userId: user.id,
+      role: "USER",
+      permissions: applyPermissionDependencies(permissions),
+    }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
@@ -122,12 +133,21 @@ export async function PUT(request, { params }) {
     }
 
     const values = body?.permissions;
+    const parentChanges = body?.parentChanges ?? {};
     if (
       !values ||
       typeof values !== "object" ||
       Array.isArray(values) ||
       PERMISSIONS.some((permission) => typeof values[permission] !== "boolean") ||
-      Object.keys(values).some((permission) => !PERMISSIONS.includes(permission))
+      Object.keys(values).some((permission) => !PERMISSIONS.includes(permission)) ||
+      !parentChanges ||
+      typeof parentChanges !== "object" ||
+      Array.isArray(parentChanges) ||
+      Object.entries(parentChanges).some(
+        ([permission, enabled]) =>
+          !Object.hasOwn(PERMISSION_DEPENDENCIES, permission) ||
+          typeof enabled !== "boolean",
+      )
     ) {
       return NextResponse.json(
         { success: false, error: "Provide a boolean value for every supported permission." },
@@ -135,6 +155,7 @@ export async function PUT(request, { params }) {
       );
     }
 
+    const normalizedValues = applyPermissionDependencies(values, parentChanges);
     await prisma.$transaction(
       PERMISSIONS.map((permission) =>
         prisma.userPermission.upsert({
@@ -143,16 +164,16 @@ export async function PUT(request, { params }) {
             id: randomUUID(),
             userId: user.id,
             permission,
-            enabled: values[permission],
+            enabled: normalizedValues[permission],
           },
-          update: { enabled: values[permission] },
+          update: { enabled: normalizedValues[permission] },
         })
       )
     );
     return NextResponse.json({
       success: true,
       role: "USER",
-      permissions: values,
+      permissions: normalizedValues,
       message: `Permissions saved for ${user.email}.`,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

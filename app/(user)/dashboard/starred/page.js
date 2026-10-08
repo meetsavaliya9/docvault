@@ -12,6 +12,8 @@ import {
   ShieldCheckIcon,
 } from "@/components/UI/Icons";
 import { FileBadge, FileIconBox } from "@/components/UI/FileBadge";
+import PermissionDenied from "@/components/User/UI/PermissionDenied";
+import PermissionActionButton from "@/components/User/UI/PermissionActionButton";
 
 export default function StarredPage() {
   const {
@@ -29,7 +31,13 @@ export default function StarredPage() {
     f.folder.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (!hasPermission("VIEW_STARRED") || !hasPermission("VIEW_DOCUMENTS")) return null;
+  if (!hasPermission("VIEW_DOCUMENTS")) {
+    return (
+      <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+        <PermissionDenied permission="VIEW_DOCUMENTS" />
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
@@ -139,13 +147,14 @@ export default function StarredPage() {
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>}
-                      {hasPermission("DOWNLOAD_DOCUMENT") && <button
+                      <PermissionActionButton
+                        permission="DOWNLOAD_DOCUMENT"
                         onClick={() => downloadDocument(file)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                        title="Download"
+                        title="Download document"
                       >
                         <DownloadIcon className="w-4 h-4" />
-                      </button>}
+                      </PermissionActionButton>
                     </div>
                   </td>
                 </tr>
@@ -227,16 +236,18 @@ export default function StarredPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              {hasPermission("DOWNLOAD_DOCUMENT") && <button
+              <PermissionActionButton
+                permission="DOWNLOAD_DOCUMENT"
                 onClick={() => {
                   downloadDocument(previewFile);
                   setPreviewFile(null);
                 }}
                 className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                title="Download document"
               >
                 <DownloadIcon className="w-4 h-4" />
                 Download Copy
-              </button>}
+              </PermissionActionButton>
               <button
                 onClick={() => setPreviewFile(null)}
                 className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"

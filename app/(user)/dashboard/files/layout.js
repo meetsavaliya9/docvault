@@ -1,6 +1,9 @@
 import { requirePagePermission } from "@/lib/permissions";
+import PermissionDenied from "@/components/User/UI/PermissionDenied";
 
 export default async function FilesLayout({ children }) {
-  await requirePagePermission("VIEW_DOCUMENTS");
-  return children;
+  const allowed = await requirePagePermission("VIEW_DOCUMENTS");
+  return allowed
+    ? children
+    : <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><PermissionDenied permission="VIEW_DOCUMENTS" /></main>;
 }

@@ -18,6 +18,8 @@ import {
 import { FileBadge, FileIconBox } from "@/components/UI/FileBadge";
 import DeleteConfirmationDialog from "@/components/UI/DeleteConfirmationDialog";
 import DocumentManagementActions from "@/app/(user)/dashboard/components/DocumentManagementActions";
+import PermissionDenied from "@/components/User/UI/PermissionDenied";
+import PermissionActionButton from "@/components/User/UI/PermissionActionButton";
 
 export default function FolderPage({ params }) {
   const unwrappedParams = use(params);
@@ -93,7 +95,6 @@ export default function FolderPage({ params }) {
     }
   };
 
-  if (!hasPermission("VIEW_FOLDERS")) return null;
   if (!folders.some((folder) => folder.slug === folderSlug)) {
     return (
       <main className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6 lg:p-8">
@@ -170,7 +171,10 @@ export default function FolderPage({ params }) {
       </div>
 
       {/* Files in Folder Table */}
-      {hasPermission("VIEW_DOCUMENTS") && <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {!hasPermission("UPLOAD_DOCUMENT") && (
+        <PermissionDenied permission="UPLOAD_DOCUMENT" compact />
+      )}
+      {hasPermission("VIEW_DOCUMENTS") ? <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-bold text-sm text-slate-900">
             Documents in {currentFolder.name}
@@ -240,13 +244,14 @@ export default function FolderPage({ params }) {
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>}
-                      {hasPermission("DOWNLOAD_DOCUMENT") && <button
+                      <PermissionActionButton
+                        permission="DOWNLOAD_DOCUMENT"
                         onClick={() => downloadDocument(doc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                        title="Download"
+                        title="Download document"
                       >
                         <DownloadIcon className="w-4 h-4" />
-                      </button>}
+                      </PermissionActionButton>
                       <DocumentManagementActions document={doc} />
                       {hasPermission("DELETE_DOCUMENT") && <button
                         onClick={() => setPendingDeleteFile(doc)}
@@ -287,7 +292,7 @@ export default function FolderPage({ params }) {
             </tbody>
           </table>
         </div>
-      </div>}
+      </div> : <PermissionDenied permission="VIEW_DOCUMENTS" />}
 
       {isRenameOpen && (
         <div
@@ -367,16 +372,18 @@ export default function FolderPage({ params }) {
             </div>
 
             <div className="flex items-center gap-3">
-              {hasPermission("DOWNLOAD_DOCUMENT") && <button
+              <PermissionActionButton
+                permission="DOWNLOAD_DOCUMENT"
                 onClick={() => {
                   downloadDocument(previewFile);
                   setPreviewFile(null);
                 }}
                 className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                title="Download document"
               >
                 <DownloadIcon className="w-4 h-4" />
                 Download Copy
-              </button>}
+              </PermissionActionButton>
               <button
                 onClick={() => setPreviewFile(null)}
                 className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"

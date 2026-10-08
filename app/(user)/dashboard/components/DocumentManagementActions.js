@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { useVault } from "@/app/(user)/dashboard/lib/vaultContext";
+import PermissionActionButton from "@/components/User/UI/PermissionActionButton";
 
 export default function DocumentManagementActions({ document, className = "" }) {
   const { folders, hasPermission, moveDocument, renameDocument } = useVault();
@@ -47,26 +48,24 @@ export default function DocumentManagementActions({ document, className = "" }) 
   return (
     <>
       <div className={`flex items-center gap-1 ${className}`}>
-        {canRename && (
-          <button
-            type="button"
-            onClick={() => openModal("rename")}
-            className="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-            title="Rename document"
-          >
-            Rename
-          </button>
-        )}
-        {canMove && (
-          <button
-            type="button"
-            onClick={() => openModal("move")}
-            className="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-            title="Move document"
-          >
-            Move
-          </button>
-        )}
+        <PermissionActionButton
+          permission="RENAME_DOCUMENT"
+          allowed={canRename}
+          onClick={() => openModal("rename")}
+          className="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+          title="Rename document"
+        >
+          Rename
+        </PermissionActionButton>
+        <PermissionActionButton
+          permission="MOVE_DOCUMENT"
+          allowed={canMove}
+          onClick={() => openModal("move")}
+          className="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+          title="Move document"
+        >
+          Move
+        </PermissionActionButton>
       </div>
 
       {mode && (

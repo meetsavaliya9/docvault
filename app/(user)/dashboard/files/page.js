@@ -21,6 +21,8 @@ import {
 import { FileBadge, FileIconBox } from "@/components/UI/FileBadge";
 import DeleteConfirmationDialog from "@/components/UI/DeleteConfirmationDialog";
 import DocumentManagementActions from "@/app/(user)/dashboard/components/DocumentManagementActions";
+import PermissionDenied from "@/components/User/UI/PermissionDenied";
+import PermissionActionButton from "@/components/User/UI/PermissionActionButton";
 
 export default function FilesPage() {
   const {
@@ -147,8 +149,6 @@ export default function FilesPage() {
       });
   }, [documents, search, selectedType, selectedFolder, sortBy, canSearchDocuments, canSearchByName, canSearchByType, canFilterDocuments, canSortDocuments]);
 
-  if (!canViewDocuments) return null;
-
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Top Header Bar */}
@@ -177,7 +177,7 @@ export default function FilesPage() {
               New Folder
             </button>
           )}
-          {hasPermission("UPLOAD_DOCUMENT") && <>
+          {hasPermission("UPLOAD_DOCUMENT") ? <>
           {hasPermission("VIEW_FOLDERS") && (
           <select
             value={targetFolderSlug}
@@ -203,12 +203,12 @@ export default function FilesPage() {
               onChange={handleFileUpload}
             />
           </label>
-          </>}
+          </> : <PermissionDenied permission="UPLOAD_DOCUMENT" compact />}
         </div>
       </div>
 
       {/* Drag & Drop Zone */}
-      {hasPermission("UPLOAD_DOCUMENT") && (
+      {hasPermission("UPLOAD_DOCUMENT") ? (
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -229,6 +229,8 @@ export default function FilesPage() {
           Real file upload supported: PDF, DOCX, XLSX, PNG, JPG, TXT (encrypted with AES-256)
         </p>
       </div>
+      ) : (
+        <PermissionDenied permission="UPLOAD_DOCUMENT" />
       )}
 
       {/* Filter and Control Bar */}
@@ -399,13 +401,14 @@ export default function FilesPage() {
                   >
                     <EyeIcon className="w-4 h-4" />
                   </button>}
-                  {hasPermission("DOWNLOAD_DOCUMENT") && <button
+                  <PermissionActionButton
+                    permission="DOWNLOAD_DOCUMENT"
                     onClick={() => downloadDocument(doc)}
                     className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                    title="Download"
+                    title="Download document"
                   >
                     <DownloadIcon className="w-4 h-4" />
-                  </button>}
+                  </PermissionActionButton>
                   <DocumentManagementActions document={doc} />
                   {hasPermission("DELETE_DOCUMENT") && <button
                     onClick={() => setPendingDeleteFile(doc)}
@@ -507,13 +510,14 @@ export default function FilesPage() {
                         >
                           <EyeIcon className="w-4 h-4" />
                         </button>}
-                        {hasPermission("DOWNLOAD_DOCUMENT") && <button
+                        <PermissionActionButton
+                          permission="DOWNLOAD_DOCUMENT"
                           onClick={() => downloadDocument(doc)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                          title="Download"
+                          title="Download document"
                         >
                           <DownloadIcon className="w-4 h-4" />
-                        </button>}
+                        </PermissionActionButton>
                         <DocumentManagementActions document={doc} />
                         {hasPermission("DELETE_DOCUMENT") && <button
                           onClick={() => setPendingDeleteFile(doc)}
@@ -635,16 +639,18 @@ export default function FilesPage() {
 
             {/* Modal Actions */}
             <div className="flex items-center gap-3">
-              {hasPermission("DOWNLOAD_DOCUMENT") && <button
+              <PermissionActionButton
+                permission="DOWNLOAD_DOCUMENT"
                 onClick={() => {
                   downloadDocument(viewFile);
                   setViewFile(null);
                 }}
                 className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold text-xs shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                title="Download document"
               >
                 <DownloadIcon className="w-4 h-4" />
                 Download Decrypted File
-              </button>}
+              </PermissionActionButton>
               {hasPermission("DELETE_DOCUMENT") && <button
                 onClick={() => {
                   setPendingDeleteFile(viewFile);

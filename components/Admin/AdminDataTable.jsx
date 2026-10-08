@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   PERMISSIONS,
+  PERMISSION_DEPENDENCIES,
   PERMISSION_DESCRIPTIONS,
   PERMISSION_GROUPS,
   PERMISSION_LABELS,
+  getPermissionParents,
+  setPermissionValue,
 } from "@/lib/permissionConstants";
 
 const resourceConfig = {
@@ -371,6 +374,7 @@ export default function AdminDataTable({
   const [selected, setSelected] = useState(null);
   const [permissionTarget, setPermissionTarget] = useState(null);
   const [permissionValues, setPermissionValues] = useState({});
+  const [permissionParentChanges, setPermissionParentChanges] = useState({});
   const [permissionError, setPermissionError] = useState("");
   const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [permissionsSaving, setPermissionsSaving] = useState(false);
@@ -499,6 +503,7 @@ export default function AdminDataTable({
   const openPermissionEditor = async (item) => {
     setPermissionTarget(item);
     setPermissionValues({});
+    setPermissionParentChanges({});
     setPermissionError("");
     setPermissionsLoading(true);
     try {
@@ -514,8 +519,10 @@ export default function AdminDataTable({
         throw new Error("The server returned an invalid permissions list.");
       }
       setPermissionValues(result.permissions || {});
+      setPermissionParentChanges({});
     } catch (loadError) {
       setPermissionValues({});
+      setPermissionParentChanges({});
       setPermissionError(
         loadError.name === "TypeError"
           ? "Could not reach the server. Check your connection and try again."
@@ -537,7 +544,10 @@ export default function AdminDataTable({
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ permissions: permissionValues }),
+          body: JSON.stringify({
+            permissions: permissionValues,
+            parentChanges: permissionParentChanges,
+          }),
         },
       );
       const result = await readPermissionResponse(
@@ -1241,14 +1251,32 @@ export default function AdminDataTable({
                             type="button"
                             role="switch"
                             aria-checked={permissionValues[permission] === true}
-                            aria-label={PERMISSION_LABELS[permission]}
-                            onClick={() =>
-                              setPermissionValues((current) => ({
-                                ...current,
-                                [permission]: !current[permission],
-                              }))
+                            aria-disabled={
+                              permissionsLoading ||
+                              getPermissionParents(permission).some(
+                                (parent) => permissionValues[parent] !== true,
+                              )
                             }
-                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${permissionValues[permission] ? "bg-blue-600" : "bg-slate-300"}`}
+                            aria-label={PERMISSION_LABELS[permission]}
+                            disabled={
+                              permissionsLoading ||
+                              getPermissionParents(permission).some(
+                                (parent) => permissionValues[parent] !== true,
+                              )
+                            }
+                            onClick={() => {
+                              const enabled = permissionValues[permission] !== true;
+                              setPermissionValues((current) =>
+                                setPermissionValue(current, permission, enabled),
+                              );
+                              if (Object.hasOwn(PERMISSION_DEPENDENCIES, permission)) {
+                                setPermissionParentChanges((current) => ({
+                                  ...current,
+                                  [permission]: enabled,
+                                }));
+                              }
+                            }}
+                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${permissionValues[permission] ? "bg-blue-600" : "bg-slate-300"}`}
                           >
                             <span
                               className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${permissionValues[permission] ? "translate-x-6" : "translate-x-1"}`}
