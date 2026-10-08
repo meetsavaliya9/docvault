@@ -165,7 +165,11 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
         if (cancelled) return;
 
         setDocuments((savedDocumentsResult.documents || []).map(normalizeDocument));
-        setFolders(savedVault.folders?.length ? savedVault.folders : DEFAULT_FOLDERS);
+        setFolders(
+          permissionEnabled(userPermissions, "VIEW_FOLDERS")
+            ? savedVault.folders?.length ? savedVault.folders : DEFAULT_FOLDERS
+            : [],
+        );
         setTrash(savedVault.trash || []);
         if (savedBilling) setBilling(savedBilling);
       } catch (error) {
@@ -226,6 +230,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   useEffect(() => {
     const refreshBilling = async () => {
+      if (!permissionEnabled(userPermissions, "VIEW_SUBSCRIPTION")) return;
       try {
         const response = await fetch("/api/billing", { cache: "no-store" });
         if (!response.ok) throw new Error("Could not refresh subscription details.");
@@ -247,9 +252,10 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, []);
+  }, [userPermissions]);
 
   const markNotificationRead = (notificationId) => {
+    if (!permissionEnabled(userPermissions, "MARK_NOTIFICATION_READ")) return;
     setNotifications((current) =>
       current.map((notification) =>
         notification.id === notificationId
@@ -260,12 +266,16 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
   };
 
   const markAllNotificationsRead = () => {
+    if (!permissionEnabled(userPermissions, "MARK_NOTIFICATION_READ")) return;
     setNotifications((current) =>
       current.map((notification) => ({ ...notification, read: true }))
     );
   };
 
-  const clearNotifications = () => setNotifications([]);
+  const clearNotifications = () => {
+    if (!permissionEnabled(userPermissions, "MANAGE_NOTIFICATIONS")) return;
+    setNotifications([]);
+  };
 
   useEffect(() => () => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -274,17 +284,22 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
   // Keyboard shortcut listener for Ctrl+K or Cmd+K
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      if (
+        permissionEnabled(userPermissions, "SEARCH_DOCUMENTS") &&
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === "k"
+      ) {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [userPermissions]);
 
   // Toggle star status on a document
   const toggleStar = (docId) => {
+    if (!permissionEnabled(userPermissions, "MANAGE_STARRED_DOCUMENTS")) return;
     const current = documents.find((doc) => String(doc.id) === String(docId));
     if (!current) return;
     const starred = !current.starred;
@@ -327,7 +342,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Upload media to Cloudinary, save metadata in MySQL, then refresh the list.
   const uploadFile = async (file, targetFolderSlug = "work") => {
-    if (!file) return;
+    if (!file || !permissionEnabled(userPermissions, "UPLOAD_DOCUMENT")) return;
 
     const targetFolder =
       folders.find((f) => f.slug === targetFolderSlug) || folders[0];
@@ -366,6 +381,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Optimistically remove the document, rolling back if MySQL rejects it.
   const deleteDocument = async (docId) => {
+    if (!permissionEnabled(userPermissions, "PERMANENT_DELETE_DOCUMENT")) return;
     const docToDelete = documents.find(
       (d) => d.id === docId || String(d.id) === String(docId)
     );
@@ -399,6 +415,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Move to Trash immediately and roll back if MySQL cannot delete the document.
   const moveToTrash = async (docId) => {
+    if (!permissionEnabled(userPermissions, "DELETE_DOCUMENT")) return;
     const docToDelete = documents.find(
       (d) => d.id === docId || String(d.id) === String(docId)
     );
@@ -441,6 +458,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Restore a trashed record to MySQL and remove it from Trash.
   const restoreFromTrash = (trashId) => {
+    if (!permissionEnabled(userPermissions, "RESTORE_DOCUMENT")) return;
     const item = trash.find(
       (t) => t.id === trashId || String(t.id) === String(trashId)
     );
@@ -488,6 +506,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Permanently delete a single item from Trash
   const deletePermanently = (trashId) => {
+    if (!permissionEnabled(userPermissions, "PERMANENT_DELETE_DOCUMENT")) return;
     const item = trash.find(
       (t) => t.id === trashId || String(t.id) === String(trashId)
     );
@@ -506,6 +525,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Empty entire Trash
   const emptyTrash = () => {
+    if (!permissionEnabled(userPermissions, "EMPTY_TRASH")) return;
     if (trash.length === 0) return;
     trashMutationRef.current = "empty";
     setTrash([]);
@@ -514,7 +534,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Create a new folder
   const createFolder = (name, description = "") => {
-    if (!name.trim()) return;
+    if (!name.trim() || !permissionEnabled(userPermissions, "CREATE_FOLDER")) return;
 
     const slug = name
       .trim()
@@ -544,6 +564,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Delete a folder and move its documents to General
   const deleteFolder = async (slugOrId) => {
+    if (!permissionEnabled(userPermissions, "DELETE_FOLDER")) return false;
     const folderToDelete = folders.find(
       (f) => f.slug === slugOrId || f.id === slugOrId
     );
@@ -574,6 +595,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Move a document to a different folder
   const moveDocument = async (docId, newFolderSlug, newFolderName) => {
+    if (!permissionEnabled(userPermissions, "MOVE_DOCUMENT")) return;
     const doc = documents.find((d) => String(d.id) === String(docId));
     if (!doc) return;
 
@@ -606,7 +628,7 @@ export function VaultProvider({ children, userId = "", userEmail = "", userPermi
 
   // Real download trigger
   const downloadDocument = (doc) => {
-    if (!doc) return;
+    if (!doc || !permissionEnabled(userPermissions, "DOWNLOAD_DOCUMENT")) return;
 
     const fileContent = doc.fileData || doc.dataUrl;
 

@@ -55,6 +55,15 @@ export async function PATCH(request, { params }) {
   if (Object.hasOwn(data, "name") && !(await hasPermission(user, "RENAME_DOCUMENT"))) {
     return NextResponse.json({ error: "You do not have permission to rename documents." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
+  if (
+    (Object.hasOwn(data, "folder") || Object.hasOwn(data, "folderSlug")) &&
+    !(await hasPermission(user, "MOVE_DOCUMENT"))
+  ) {
+    return NextResponse.json({ error: "You do not have permission to move documents." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
+  if (Object.hasOwn(data, "starred") && !(await hasPermission(user, "MANAGE_STARRED_DOCUMENTS"))) {
+    return NextResponse.json({ error: "You do not have permission to manage Starred documents." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
 
   try {
     const updated = await prisma.document.updateMany({
@@ -89,8 +98,10 @@ export async function DELETE(request, { params }) {
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
   }
-  if (!(await hasPermission(user, "DELETE_DOCUMENT"))) {
-    return NextResponse.json({ error: "You do not have permission to delete documents." }, { status: 403, headers: NO_CACHE_HEADERS });
+  const isPermanentDelete = new URL(request.url).searchParams.get("permanent") === "true";
+  const deletePermission = isPermanentDelete ? "PERMANENT_DELETE_DOCUMENT" : "DELETE_DOCUMENT";
+  if (!(await hasPermission(user, deletePermission))) {
+    return NextResponse.json({ error: `You do not have permission to ${isPermanentDelete ? "permanently delete" : "delete"} documents.` }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   const { id } = await params;
@@ -115,7 +126,7 @@ export async function DELETE(request, { params }) {
 
     let warning;
     if (
-      new URL(request.url).searchParams.get("permanent") === "true" &&
+      isPermanentDelete &&
       document.cloudinaryPublicId &&
       document.cloudinaryResourceType
     ) {

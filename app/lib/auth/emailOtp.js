@@ -355,7 +355,11 @@ export async function verifySignupOtp(email, code) {
               name: pending.name || null,
               passwordHash: pending.passwordHash,
               userPermissions: {
-                create: DEFAULT_USER_PERMISSIONS.map((permission) => ({ permission, enabled: true })),
+                create: DEFAULT_USER_PERMISSIONS.map((permission) => ({
+                  id: randomUUID(),
+                  permission,
+                  enabled: true,
+                })),
               },
               subscriptions: {
                 create: {

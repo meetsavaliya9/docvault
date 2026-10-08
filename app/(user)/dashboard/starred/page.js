@@ -29,7 +29,7 @@ export default function StarredPage() {
     f.folder.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (!hasPermission("VIEW_DOCUMENTS")) return null;
+  if (!hasPermission("VIEW_STARRED") || !hasPermission("VIEW_DOCUMENTS")) return null;
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
@@ -49,7 +49,7 @@ export default function StarredPage() {
         </div>
 
         {/* Search */}
-        <div className="relative w-full sm:w-72">
+        {hasPermission("SEARCH_DOCUMENTS") && hasPermission("SEARCH_BY_NAME") && <div className="relative w-full sm:w-72">
           <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
@@ -58,7 +58,7 @@ export default function StarredPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-white border border-slate-200 focus:border-blue-500 text-slate-800 placeholder-slate-400 outline-none shadow-xs"
           />
-        </div>
+        </div>}
       </div>
 
       {/* Files Table */}
@@ -123,22 +123,22 @@ export default function StarredPage() {
 
                   <td className="px-3 sm:px-5 py-3 sm:py-3.5 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
+                      {hasPermission("MANAGE_STARRED_DOCUMENTS") && <button
                         onClick={() => toggleStar(file.id)}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
                         title="Remove Star"
                       >
                         <StarIcon className="w-3.5 h-3.5 text-amber-500" filled={false} />
                         <span className="hidden xs:inline">Remove Star</span>
-                      </button>
+                      </button>}
 
-                      <button
+                      {hasPermission("VIEW_DOCUMENT_DETAILS") && <button
                         onClick={() => setPreviewFile(file)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                         title="Preview"
                       >
                         <EyeIcon className="w-4 h-4" />
-                      </button>
+                      </button>}
                       {hasPermission("DOWNLOAD_DOCUMENT") && <button
                         onClick={() => downloadDocument(file)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
@@ -163,12 +163,12 @@ export default function StarredPage() {
                     <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
                       Click the star icon next to any document in your vault to bookmark it here for instant access.
                     </p>
-                    <Link
+                    {hasPermission("VIEW_DOCUMENTS") && <Link
                       href="/dashboard/files"
                       className="mt-4 inline-block px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700 transition-colors"
                     >
                       Browse My Files
-                    </Link>
+                    </Link>}
                   </td>
                 </tr>
               )}
@@ -178,7 +178,7 @@ export default function StarredPage() {
       </div>
 
       {/* Preview Modal */}
-      {previewFile && (
+      {(hasPermission("VIEW_DOCUMENT_DETAILS") || hasPermission("PREVIEW_DOCUMENT")) && previewFile && (
         <div
           onClick={() => setPreviewFile(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150"
@@ -199,16 +199,16 @@ export default function StarredPage() {
                   </p>
                 </div>
               </div>
-              {hasPermission("DOWNLOAD_DOCUMENT") && <button
+              <button
                 onClick={() => setPreviewFile(null)}
                 className="text-slate-400 hover:text-slate-700 text-xl leading-none cursor-pointer"
               >
                 &times;
-              </button>}
+              </button>
             </div>
 
             <div className="my-5 p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center text-center">
-              {previewFile.dataUrl && isImageDocument(previewFile) ? (
+              {hasPermission("PREVIEW_DOCUMENT") && previewFile.dataUrl && isImageDocument(previewFile) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewFile.dataUrl}
@@ -218,12 +218,12 @@ export default function StarredPage() {
               ) : (
                 <ShieldCheckIcon className="w-8 h-8 text-emerald-600 mb-2" />
               )}
-              <p className="text-xs font-bold text-slate-800">
+              {hasPermission("PREVIEW_DOCUMENT") && <p className="text-xs font-bold text-slate-800">
                 Starred Cloud Asset
-              </p>
-              <p className="text-[11px] text-slate-400 mt-1">
+              </p>}
+              {hasPermission("PREVIEW_DOCUMENT") && <p className="text-[11px] text-slate-400 mt-1">
                 Zero-knowledge encrypted. Ready for offline or online sync.
-              </p>
+              </p>}
             </div>
 
             <div className="flex items-center gap-3">

@@ -86,7 +86,11 @@ export async function createAccount(email, passwordOrHash, name = null, isPreHas
         name: name ? name.trim() : null,
         passwordHash,
         userPermissions: {
-          create: DEFAULT_USER_PERMISSIONS.map((permission) => ({ permission, enabled: true })),
+          create: DEFAULT_USER_PERMISSIONS.map((permission) => ({
+            id: randomUUID(),
+            permission,
+            enabled: true,
+          })),
         },
         subscriptions: {
           create: {

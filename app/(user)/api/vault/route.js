@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { deletePrivateAsset } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
+import { parseJsonText, stringifyJsonText } from "@/lib/jsonText";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,8 +15,44 @@ const NO_CACHE_HEADERS = {
   Expires: "0",
 };
 
+function getSafeDatasourceTarget() {
+  try {
+    const url = new URL(process.env.DATABASE_URL || "");
+    return {
+      host: url.hostname,
+      port: url.port || "3306",
+      database: decodeURIComponent(url.pathname.slice(1)),
+      username: decodeURIComponent(url.username),
+    };
+  } catch {
+    return { configured: false };
+  }
+}
+
+function logVaultDatabaseError(error) {
+  const message = String(error?.message || "").replace(
+    /(?:mysql|mariadb):\/\/[^@\s]+@/gi,
+    "$1://[REDACTED]@",
+  );
+  console.error("Vault API error:", {
+    name: error?.name || "Error",
+    code: error?.code || null,
+    message: message.slice(0, 1000),
+    configuredDatasource: getSafeDatasourceTarget(),
+  });
+}
+
 export async function GET() {
-  const user = await getAuthenticatedUser();
+  let user;
+  try {
+    user = await getAuthenticatedUser();
+  } catch (error) {
+    logVaultDatabaseError(error);
+    return NextResponse.json(
+      { success: false, error: "Could not authenticate or connect to the vault database." },
+      { status: 500, headers: NO_CACHE_HEADERS },
+    );
+  }
   if (!user) {
     return NextResponse.json(
       { error: "You are not signed in." },
@@ -24,9 +61,26 @@ export async function GET() {
   }
 
   try {
-    const canViewTrash = await hasPermission(user, "VIEW_TRASH");
+    const [connectedTarget] = await prisma.$queryRaw`
+      SELECT DATABASE() AS databaseName, @@hostname AS hostName, @@port AS port, CURRENT_USER() AS username
+    `;
+    console.info("Vault API Prisma datasource:", {
+      configured: getSafeDatasourceTarget(),
+      connected: {
+        host: connectedTarget.hostName,
+        port: String(connectedTarget.port),
+        database: connectedTarget.databaseName,
+        username: connectedTarget.username,
+      },
+    });
+    const [canViewFolders, canViewTrash] = await Promise.all([
+      hasPermission(user, "VIEW_FOLDERS"),
+      hasPermission(user, "VIEW_TRASH"),
+    ]);
     const [folders, trash] = await Promise.all([
-      prisma.folder.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } }),
+      canViewFolders
+        ? prisma.folder.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } })
+        : Promise.resolve([]),
       canViewTrash
         ? prisma.trashItem.findMany({ where: { userId: user.id }, orderBy: { id: "desc" } })
         : Promise.resolve([]),
@@ -34,15 +88,15 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        folders: folders.map((folder) => folder.data),
-        trash: trash.map((item) => item.data),
+        folders: folders.map((folder) => parseJsonText(folder.data, {})),
+        trash: trash.map((item) => parseJsonText(item.data, {})),
       },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (error) {
-    console.error("Failed to load vault settings from MySQL:", error);
+    logVaultDatabaseError(error);
     return NextResponse.json(
-      { error: "Could not load folders or trash from MySQL. Check database availability." },
+      { success: false, error: "Could not load folders or trash from MySQL. Check database availability." },
       { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
@@ -93,31 +147,76 @@ export async function PUT(request) {
   }
 
   try {
-    const previousTrash = await prisma.trashItem.findMany({
-      where: { userId: user.id },
-      select: { data: true },
-    });
+    const [previousTrash, previousFolders] = await Promise.all([
+      prisma.trashItem.findMany({
+        where: { userId: user.id },
+        select: { data: true },
+      }),
+      prisma.folder.findMany({
+        where: { userId: user.id },
+        select: { id: true, slug: true, data: true },
+      }),
+    ]);
     const canViewTrash = await hasPermission(user, "VIEW_TRASH");
-    const previousById = new Map(previousTrash.map((item) => [String(item.data?.id), item.data]));
+    const canViewFolders = await hasPermission(user, "VIEW_FOLDERS");
+    const previousFolderById = new Map(
+      previousFolders.map((folder) => {
+        const data = parseJsonText(folder.data, {});
+        return [String(data.id || folder.slug), data];
+      }),
+    );
+    const incomingFolderById = new Map(body.folders.map((folder) => [String(folder.id), folder]));
+    const addedFolders = canViewFolders
+      ? [...incomingFolderById.entries()].filter(([id]) => !previousFolderById.has(id))
+      : [];
+    const removedFolders = canViewFolders
+      ? [...previousFolderById.keys()].filter((id) => !incomingFolderById.has(id))
+      : [];
+    const updatedFolders = canViewFolders
+      ? [...incomingFolderById.entries()].filter(([id, folder]) => {
+          const previous = previousFolderById.get(id);
+          return previous && JSON.stringify(previous) !== JSON.stringify(folder);
+        })
+      : [];
+
+    if (!canViewFolders && body.folders.length > 0) {
+      return NextResponse.json({ error: "You do not have permission to update folders." }, { status: 403 });
+    }
+    if (addedFolders.length && !(await hasPermission(user, "CREATE_FOLDER"))) {
+      return NextResponse.json({ error: "You do not have permission to create folders." }, { status: 403 });
+    }
+    if (removedFolders.length && !(await hasPermission(user, "DELETE_FOLDER"))) {
+      return NextResponse.json({ error: "You do not have permission to delete folders." }, { status: 403 });
+    }
+    if (updatedFolders.length && !(await hasPermission(user, "RENAME_FOLDER"))) {
+      return NextResponse.json({ error: "You do not have permission to rename folders." }, { status: 403 });
+    }
+
+    const previousById = new Map(previousTrash.map((item) => {
+      const data = parseJsonText(item.data, {});
+      return [String(data?.id), data];
+    }));
     const incomingById = new Map(body.trash.map((item) => [String(item.id), item]));
     const removedTrash = canViewTrash
       ? [...previousById.entries()].filter(([id]) => !incomingById.has(id))
       : [];
-    const addedTrash = canViewTrash
+    const addedTrash = trashAction === "add"
+      ? [...incomingById.entries()].filter(([id]) => !previousById.has(id))
+      : canViewTrash
       ? [...incomingById.entries()].filter(([id]) => !previousById.has(id))
       : [];
 
     if ((removedTrash.length || addedTrash.length) && !trashAction) {
       return NextResponse.json({ error: "Trash changes require an explicit authorized action." }, { status: 403 });
     }
-    if (trashAction && !canViewTrash) {
+    if (trashAction && trashAction !== "add" && !canViewTrash) {
       return NextResponse.json({ error: "You do not have permission to view or change Trash." }, { status: 403 });
     }
 
     const requiredPermission = {
       add: "DELETE_DOCUMENT",
       restore: "RESTORE_DOCUMENT",
-      delete: "DELETE_DOCUMENT",
+      delete: "PERMANENT_DELETE_DOCUMENT",
       empty: "EMPTY_TRASH",
     }[trashAction];
     if (trashAction && !(await hasPermission(user, requiredPermission))) {
@@ -169,21 +268,27 @@ export async function PUT(request) {
           ["image", "video", "raw"].includes(document.cloudinaryResourceType)
       );
 
-    await prisma.$transaction([
-      prisma.folder.deleteMany({ where: { userId: user.id } }),
-      ...(body.folders.length
+    const folderOperations = canViewFolders && (addedFolders.length || removedFolders.length || updatedFolders.length)
+      ? [
+          prisma.folder.deleteMany({ where: { userId: user.id } }),
+          ...(body.folders.length
         ? [
             prisma.folder.createMany({
               data: body.folders.map((folder) => ({
                 id: `${user.id}-${folder.id}`,
                 userId: user.id,
                 slug: folder.slug,
-                data: folder,
+                data: stringifyJsonText(folder),
               })),
               skipDuplicates: true,
             }),
           ]
         : []),
+        ]
+      : [];
+
+    await prisma.$transaction([
+      ...folderOperations,
       ...(removedTrash.length
         ? [
             prisma.trashItem.deleteMany({
@@ -200,7 +305,7 @@ export async function PUT(request) {
               data: addedTrash.map(([, item]) => ({
                 id: `${user.id}-${item.id}`,
                 userId: user.id,
-                data: item,
+                data: stringifyJsonText(item),
               })),
               skipDuplicates: true,
             }),

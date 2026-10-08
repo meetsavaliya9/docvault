@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { PERMISSIONS, PERMISSION_LABELS } from "@/lib/permissionConstants";
+import {
+  PERMISSIONS,
+  PERMISSION_DESCRIPTIONS,
+  PERMISSION_GROUPS,
+  PERMISSION_LABELS,
+} from "@/lib/permissionConstants";
 
 const resourceConfig = {
   users: {
@@ -1181,7 +1186,7 @@ export default function AdminDataTable({
                 ×
               </button>
             </div>
-            <div className="mt-5 divide-y divide-slate-100 rounded-lg border border-slate-200 px-4">
+            <div className="mt-5 max-h-[60vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200 px-4">
               {permissionsLoading ? (
                 <p className="py-6 text-sm text-slate-500">
                   Loading permissions...
@@ -1201,32 +1206,51 @@ export default function AdminDataTable({
                   </button>
                 </div>
               ) : (
-                PERMISSIONS.map((permission) => (
-                  <div
-                    key={permission}
-                    className="flex items-center justify-between gap-4 py-3"
-                  >
-                    <span className="text-sm font-medium text-slate-700">
-                      {PERMISSION_LABELS[permission]}
-                    </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={permissionValues[permission] === true}
-                      aria-label={PERMISSION_LABELS[permission]}
-                      onClick={() =>
-                        setPermissionValues((current) => ({
-                          ...current,
-                          [permission]: !current[permission],
-                        }))
-                      }
-                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${permissionValues[permission] ? "bg-blue-600" : "bg-slate-300"}`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${permissionValues[permission] ? "translate-x-6" : "translate-x-1"}`}
-                      />
-                    </button>
-                  </div>
+                PERMISSION_GROUPS.map((group) => (
+                  <section key={group.title} className="py-3">
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      {group.title}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {group.description}
+                    </p>
+                    <div className="mt-1 divide-y divide-slate-100">
+                      {group.permissions.map((permission) => (
+                        <div
+                          key={permission}
+                          className="flex items-center justify-between gap-4 py-3"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-slate-700">
+                              {PERMISSION_LABELS[permission]}
+                            </span>
+                            {PERMISSION_DESCRIPTIONS[permission] && (
+                              <span className="mt-0.5 block text-xs text-slate-500">
+                                {PERMISSION_DESCRIPTIONS[permission]}
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={permissionValues[permission] === true}
+                            aria-label={PERMISSION_LABELS[permission]}
+                            onClick={() =>
+                              setPermissionValues((current) => ({
+                                ...current,
+                                [permission]: !current[permission],
+                              }))
+                            }
+                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${permissionValues[permission] ? "bg-blue-600" : "bg-slate-300"}`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${permissionValues[permission] ? "translate-x-6" : "translate-x-1"}`}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 ))
               )}
             </div>

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
+import { parseJsonText, stringifyJsonText } from "@/lib/jsonText";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +22,9 @@ export async function PATCH(request, { params }) {
       { status: 401, headers: NO_CACHE_HEADERS }
     );
   }
+  if (!(await hasPermission(user, "VIEW_FOLDERS"))) {
+    return NextResponse.json({ error: "You do not have permission to view folders." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
 
   const { id } = await params;
   let body;
@@ -30,6 +35,9 @@ export async function PATCH(request, { params }) {
       { error: "Request body must be valid JSON." },
       { status: 400, headers: NO_CACHE_HEADERS }
     );
+  }
+  if (typeof body?.name === "string" && !(await hasPermission(user, "RENAME_FOLDER"))) {
+    return NextResponse.json({ error: "You do not have permission to rename folders." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   try {
@@ -48,7 +56,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    const currentData = existing.data || {};
+    const currentData = parseJsonText(existing.data, {});
     const updatedData = {
       ...currentData,
       ...(body.name ? { name: body.name.trim() } : {}),
@@ -61,11 +69,11 @@ export async function PATCH(request, { params }) {
 
     const updated = await prisma.folder.update({
       where: { id: existing.id },
-      data: { data: updatedData },
+      data: { data: stringifyJsonText(updatedData) },
     });
 
     return NextResponse.json(
-      { folder: updated.data },
+      { folder: updatedData },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (error) {
@@ -84,6 +92,9 @@ export async function DELETE(_request, { params }) {
       { error: "You are not signed in." },
       { status: 401, headers: NO_CACHE_HEADERS }
     );
+  }
+  if (!(await hasPermission(user, "DELETE_FOLDER"))) {
+    return NextResponse.json({ error: "You do not have permission to delete folders." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   const { id } = await params;
@@ -111,7 +122,7 @@ export async function DELETE(_request, { params }) {
           userId: user.id,
           OR: [
             { folderSlug: existing.slug },
-            { folder: typeof existing.data?.name === "string" ? existing.data.name : "" },
+            { folder: typeof parseJsonText(existing.data, {})?.name === "string" ? parseJsonText(existing.data, {}).name : "" },
           ],
         },
         data: {

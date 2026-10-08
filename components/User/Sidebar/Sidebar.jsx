@@ -38,6 +38,7 @@ export default function Sidebar({
       href: "/dashboard",
       icon: DashboardIcon,
       exact: true,
+      permission: "VIEW_DASHBOARD",
     },
     {
       name: "My Files",
@@ -51,7 +52,7 @@ export default function Sidebar({
       href: "/dashboard/folders",
       icon: FolderIcon,
       badge: folders.length.toString(),
-      permission: "VIEW_DOCUMENTS",
+      permission: "VIEW_FOLDERS",
     },
     {
       name: "Starred",
@@ -60,7 +61,7 @@ export default function Sidebar({
       badge:
         starredDocuments.length > 0 ? starredDocuments.length.toString() : null,
       badgeColor: "bg-amber-100 text-amber-700",
-      permission: "VIEW_DOCUMENTS",
+      permission: "VIEW_STARRED",
     },
     {
       name: "Trash",
@@ -185,43 +186,45 @@ export default function Sidebar({
       {/* Bottom Storage & User Profile */}
       <div className="pt-6 border-t border-slate-100 space-y-4">
         {/* Storage Card connected to real metrics */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-100/80">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
-            <span className="flex items-center gap-1.5">
-              <HardDriveIcon className="w-4 h-4 text-blue-600" />
-              Storage Used
-            </span>
-            <span className="text-blue-700 font-bold">
-              {storageMetrics.percentage}%
-            </span>
+        {hasPermission("VIEW_STORAGE_USAGE") && (
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-100/80">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
+              <span className="flex items-center gap-1.5">
+                <HardDriveIcon className="w-4 h-4 text-blue-600" />
+                Storage Used
+              </span>
+              <span className="text-blue-700 font-bold">
+                {storageMetrics.percentage}%
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full h-2 rounded-full bg-slate-200/80 overflow-hidden mb-2">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-500"
+                style={{ width: `${storageMetrics.percentage}%` }}
+              />
+            </div>
+
+            <p className="text-[11px] text-slate-500 mb-3">
+              <span className="font-semibold text-slate-700">
+                {storageMetrics.formattedUsed}
+              </span>{" "}
+              of {storageMetrics.quotaLabel} used
+            </p>
+
+            {hasPermission("VIEW_SUBSCRIPTION") && (
+              <Link
+                href="/dashboard/subscription"
+                onClick={onNavigate}
+                className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-blue-700 bg-white hover:bg-blue-600 hover:text-white border border-blue-200 hover:border-transparent transition-all duration-150 flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                <SparklesIcon className="w-3.5 h-3.5" />
+                {billing.plan === "free" ? "View plans" : "Manage subscription"}
+              </Link>
+            )}
           </div>
-
-          {/* Progress Bar */}
-          <div className="w-full h-2 rounded-full bg-slate-200/80 overflow-hidden mb-2">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-500"
-              style={{ width: `${storageMetrics.percentage}%` }}
-            />
-          </div>
-
-          <p className="text-[11px] text-slate-500 mb-3">
-            <span className="font-semibold text-slate-700">
-              {storageMetrics.formattedUsed}
-            </span>{" "}
-            of {storageMetrics.quotaLabel} used
-          </p>
-
-          {hasPermission("VIEW_SUBSCRIPTION") && (
-            <Link
-              href="/dashboard/subscription"
-              onClick={onNavigate}
-              className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-blue-700 bg-white hover:bg-blue-600 hover:text-white border border-blue-200 hover:border-transparent transition-all duration-150 flex items-center justify-center gap-1.5 shadow-xs"
-            >
-              <SparklesIcon className="w-3.5 h-3.5" />
-              {billing.plan === "free" ? "View plans" : "Manage subscription"}
-            </Link>
-          )}
-        </div>
+        )}
 
         {/* User Card */}
         <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors group">

@@ -13,6 +13,7 @@ import {
 } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
+import { parseJsonText } from "@/lib/jsonText";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,12 @@ export async function GET(request) {
   const starred = searchParams.get("starred");
   const folderSlug = searchParams.get("folder");
   const search = searchParams.get("search");
+  if (search && !(await hasPermission(user, "SEARCH_DOCUMENTS"))) {
+    return NextResponse.json({ error: "You do not have permission to search documents." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
+  if ((starred === "true" || (folderSlug && folderSlug !== "all")) && !(await hasPermission(user, "FILTER_DOCUMENTS"))) {
+    return NextResponse.json({ error: "You do not have permission to filter documents." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
 
   const where = {
     userId: user.id,
@@ -251,7 +258,7 @@ export async function POST(request) {
         select: { data: true },
       });
       const isRestoringOwnedTrash = trashedDocuments.some(
-        (item) => String(item.data?.originalDoc?.id) === String(fields.id)
+        (item) => String(parseJsonText(item.data, {})?.originalDoc?.id) === String(fields.id)
       );
       if (!isRestoringOwnedTrash) {
         return NextResponse.json({ error: "Only a document in your Trash can be restored." }, { status: 403 });

@@ -65,9 +65,10 @@ const initialPlans = [
 
 async function main() {
   for (const plan of initialPlans) {
+    const planData = { ...plan, features: JSON.stringify(plan.features) };
     await prisma.subscriptionPlan.upsert({
       where: { slug: plan.slug },
-      create: plan,
+      create: planData,
       update: {},
     });
   }

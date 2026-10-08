@@ -26,6 +26,7 @@ export default function CommandPalette() {
     setIsCommandPaletteOpen,
     searchQuery,
     setSearchQuery,
+    hasPermission,
   } = useVault();
 
   const [query, setQuery] = useState("");
@@ -41,24 +42,29 @@ export default function CommandPalette() {
     }
   }, [isCommandPaletteOpen, searchQuery]);
 
-  if (!isCommandPaletteOpen) return null;
+  if (!isCommandPaletteOpen || !hasPermission("SEARCH_DOCUMENTS")) return null;
 
   const filteredDocs = query.trim()
     ? documents.filter(
         (d) =>
-          d.name.toLowerCase().includes(query.toLowerCase()) ||
-          d.type.toLowerCase().includes(query.toLowerCase()) ||
-          d.folder.toLowerCase().includes(query.toLowerCase())
+          (hasPermission("SEARCH_BY_NAME") &&
+            d.name.toLowerCase().includes(query.toLowerCase())) ||
+          (hasPermission("SEARCH_BY_TYPE") &&
+            d.type.toLowerCase().includes(query.toLowerCase())) ||
+          (hasPermission("VIEW_FOLDERS") &&
+            d.folder.toLowerCase().includes(query.toLowerCase())),
       )
     : documents.slice(0, 5);
 
-  const filteredFolders = query.trim()
-    ? folders.filter(
-        (f) =>
-          f.name.toLowerCase().includes(query.toLowerCase()) ||
-          f.description.toLowerCase().includes(query.toLowerCase())
-      )
-    : folders.slice(0, 4);
+  const filteredFolders = !hasPermission("VIEW_FOLDERS")
+    ? []
+    : query.trim()
+      ? folders.filter(
+          (f) =>
+            f.name.toLowerCase().includes(query.toLowerCase()) ||
+            f.description.toLowerCase().includes(query.toLowerCase()),
+        )
+      : folders.slice(0, 4);
 
   const handleSelectDoc = (doc) => {
     setIsCommandPaletteOpen(false);
@@ -109,7 +115,9 @@ export default function CommandPalette() {
           <div>
             <div className="px-3 py-1.5 text-[11px] font-bold tracking-wider text-slate-400 uppercase flex items-center justify-between">
               <span>Documents ({filteredDocs.length})</span>
-              <span className="text-[10px] text-blue-600 font-semibold">Instant Vault Search</span>
+              <span className="text-[10px] text-blue-600 font-semibold">
+                Instant Vault Search
+              </span>
             </div>
 
             <div className="space-y-1 mt-1">
@@ -158,7 +166,9 @@ export default function CommandPalette() {
                     onClick={() => handleSelectFolder(folder)}
                     className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors group border border-slate-100"
                   >
-                    <div className={`w-8 h-8 rounded-lg ${folder.bgLight} ${folder.textColor} flex items-center justify-center font-bold shrink-0`}>
+                    <div
+                      className={`w-8 h-8 rounded-lg ${folder.bgLight} ${folder.textColor} flex items-center justify-center font-bold shrink-0`}
+                    >
                       <FolderIcon className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
@@ -182,24 +192,46 @@ export default function CommandPalette() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
               {[
-                { name: "Dashboard", href: "/dashboard", icon: DashboardIcon },
-                { name: "All Files", href: "/dashboard/files", icon: FilesIcon },
-                { name: "Folders", href: "/dashboard/folders", icon: FolderIcon },
-                { name: "Starred", href: "/dashboard/starred", icon: StarIcon },
-              ].map((link) => {
-                const Icon = link.icon;
-                return (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    onClick={() => setIsCommandPaletteOpen(false)}
-                    className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 hover:bg-blue-50 hover:text-blue-600 text-slate-700 text-xs font-semibold transition-colors"
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{link.name}</span>
-                  </Link>
-                );
-              })}
+                {
+                  name: "Dashboard",
+                  href: "/dashboard",
+                  icon: DashboardIcon,
+                  permission: "VIEW_DASHBOARD",
+                },
+                {
+                  name: "All Files",
+                  href: "/dashboard/files",
+                  icon: FilesIcon,
+                  permission: "VIEW_DOCUMENTS",
+                },
+                {
+                  name: "Folders",
+                  href: "/dashboard/folders",
+                  icon: FolderIcon,
+                  permission: "VIEW_FOLDERS",
+                },
+                {
+                  name: "Starred",
+                  href: "/dashboard/starred",
+                  icon: StarIcon,
+                  permission: "VIEW_STARRED",
+                },
+              ]
+                .filter((link) => hasPermission(link.permission))
+                .map((link) => {
+                  const Icon = link.icon;
+                  return (
+                    <Link
+                      key={link.name}
+                      href={link.href}
+                      onClick={() => setIsCommandPaletteOpen(false)}
+                      className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 hover:bg-blue-50 hover:text-blue-600 text-slate-700 text-xs font-semibold transition-colors"
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{link.name}</span>
+                    </Link>
+                  );
+                })}
             </div>
           </div>
         </div>
@@ -207,7 +239,9 @@ export default function CommandPalette() {
         {/* Footer */}
         <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
           <span>Search documents, types, or shortcuts</span>
-          <span className="font-semibold text-slate-600">Press ESC to dismiss</span>
+          <span className="font-semibold text-slate-600">
+            Press ESC to dismiss
+          </span>
         </div>
       </div>
     </div>

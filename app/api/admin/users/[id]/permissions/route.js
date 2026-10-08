@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { isAdminEmail, requireAdmin } from "@/lib/auth/admin";
 import { DEFAULT_USER_PERMISSIONS, PERMISSIONS, createPermissionMap } from "@/lib/permissionConstants";
@@ -5,6 +6,39 @@ import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function getSafeDatasourceTarget() {
+  try {
+    const url = new URL(process.env.DATABASE_URL || "");
+    return {
+      host: url.hostname,
+      port: url.port || "3306",
+      database: decodeURIComponent(url.pathname.slice(1)),
+      username: decodeURIComponent(url.username),
+    };
+  } catch {
+    return { configured: false };
+  }
+}
+
+async function logRuntimeDatasourceTarget() {
+  const [connected] = await prisma.$queryRaw`
+    SELECT
+      DATABASE() AS databaseName,
+      @@hostname AS hostName,
+      @@port AS port,
+      CURRENT_USER() AS username
+  `;
+  console.info("Admin permissions Prisma datasource diagnostic:", {
+    configured: getSafeDatasourceTarget(),
+    connected: {
+      host: connected.hostName,
+      port: connected.port,
+      database: connected.databaseName,
+      username: connected.username,
+    },
+  });
+}
 
 async function getTargetUser(targetUserId) {
   return prisma.user.findUnique({
@@ -31,6 +65,10 @@ export async function GET(_request, { params }) {
         { success: false, error: "Administrator permissions cannot be changed." },
         { status: 400 },
       );
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      await logRuntimeDatasourceTarget();
     }
 
     const records = await prisma.userPermission.findMany({
@@ -101,7 +139,12 @@ export async function PUT(request, { params }) {
       PERMISSIONS.map((permission) =>
         prisma.userPermission.upsert({
           where: { userId_permission: { userId: user.id, permission } },
-          create: { userId: user.id, permission, enabled: values[permission] },
+          create: {
+            id: randomUUID(),
+            userId: user.id,
+            permission,
+            enabled: values[permission],
+          },
           update: { enabled: values[permission] },
         })
       )

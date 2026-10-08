@@ -161,7 +161,7 @@ export async function PATCH(request, { params }) {
           currency: update.currency,
           billingPeriod: update.billingPeriod,
           description: update.description.trim(),
-          features: update.features.map((feature) => feature.trim()),
+          features: JSON.stringify(update.features.map((feature) => feature.trim())),
           documentLimit: update.documentLimit,
           storageLimitBytes: BigInt(update.storageLimitBytes),
           isActive: update.isActive,

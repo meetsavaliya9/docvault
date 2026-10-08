@@ -15,7 +15,11 @@ export async function GET() {
   }
 
   try {
-    return NextResponse.json(await getBillingSummary(user.id), {
+    const billing = await getBillingSummary(user.id);
+    if (!(await hasPermission(user, "VIEW_PAYMENT_HISTORY"))) {
+      billing.latestPayment = null;
+    }
+    return NextResponse.json(billing, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

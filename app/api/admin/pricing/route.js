@@ -133,7 +133,7 @@ export async function POST(request) {
           currency: body.currency,
           billingPeriod: body.billingPeriod,
           description: body.description.trim(),
-          features: body.features.map((feature) => feature.trim()),
+          features: JSON.stringify(body.features.map((feature) => feature.trim())),
           documentLimit: body.documentLimit,
           storageLimitBytes: BigInt(body.storageLimitBytes),
           isActive: body.isActive,

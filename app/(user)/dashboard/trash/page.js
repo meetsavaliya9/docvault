@@ -133,15 +133,15 @@ export default function TrashPage() {
               </div>
             </div>
             <div className="mt-6 flex flex-col-reverse gap-2 min-[380px]:flex-row min-[380px]:justify-end">
-              {hasPermission("RESTORE_DOCUMENT") && <button
+              <button
                 type="button"
                 autoFocus
                 onClick={() => setIsEmptyTrashDialogOpen(false)}
                 className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 min-[380px]:w-auto cursor-pointer"
               >
                 Cancel
-              </button>}
-              {hasPermission("DELETE_DOCUMENT") && <button
+              </button>
+              {hasPermission("EMPTY_TRASH") && <button
                 type="button"
                 onClick={handleEmptyTrash}
                 className="w-full rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-700 min-[380px]:w-auto cursor-pointer"
@@ -228,19 +228,19 @@ export default function TrashPage() {
             </dl>
 
             <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-3 min-[380px]:flex-row">
-              <button
+              {hasPermission("RESTORE_DOCUMENT") && <button
                 onClick={() => setPendingRestore(file)}
                 className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-600 transition-all hover:bg-blue-600 hover:text-white cursor-pointer"
               >
                 <RefreshCwIcon className="h-3.5 w-3.5 shrink-0" />
                 Restore
-              </button>
-              <button
+              </button>}
+              {hasPermission("PERMANENT_DELETE_DOCUMENT") && <button
                 onClick={() => handlePermanentDelete(file)}
                 className="inline-flex min-w-0 flex-1 items-center justify-center rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 transition-all hover:bg-rose-600 hover:text-white cursor-pointer"
               >
                 Delete Forever
-              </button>
+              </button>}
             </div>
           </article>
         ))}
@@ -257,12 +257,12 @@ export default function TrashPage() {
               There are no deleted documents in your vault. Files you delete
               will be kept here for 30 days.
             </p>
-            <Link
+            {hasPermission("VIEW_DOCUMENTS") && <Link
               href="/dashboard/files"
               className="mt-4 inline-block rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
             >
               Return to My Files
-            </Link>
+            </Link>}
           </div>
         )}
       </section>
@@ -330,7 +330,7 @@ export default function TrashPage() {
                         Restore
                       </button>}
 
-                      {hasPermission("DELETE_DOCUMENT") && <button
+                      {hasPermission("PERMANENT_DELETE_DOCUMENT") && <button
                         onClick={() => handlePermanentDelete(file)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white font-semibold transition-all cursor-pointer text-xs"
                       >

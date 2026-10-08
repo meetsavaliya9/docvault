@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
+import { parseJsonText, stringifyJsonText } from "@/lib/jsonText";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +22,9 @@ export async function GET() {
       { status: 401, headers: NO_CACHE_HEADERS }
     );
   }
+  if (!(await hasPermission(user, "VIEW_FOLDERS"))) {
+    return NextResponse.json({ error: "You do not have permission to view folders." }, { status: 403, headers: NO_CACHE_HEADERS });
+  }
 
   try {
     const folders = await prisma.folder.findMany({
@@ -28,7 +33,7 @@ export async function GET() {
     });
 
     return NextResponse.json(
-      { folders: folders.map((f) => ({ ...f.data, id: f.id, slug: f.slug })) },
+      { folders: folders.map((f) => ({ ...parseJsonText(f.data, {}), id: f.id, slug: f.slug })) },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (error) {
@@ -47,6 +52,9 @@ export async function POST(request) {
       { error: "You are not signed in." },
       { status: 401, headers: NO_CACHE_HEADERS }
     );
+  }
+  if (!(await hasPermission(user, "CREATE_FOLDER"))) {
+    return NextResponse.json({ error: "You do not have permission to create folders." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   let body;
@@ -105,12 +113,12 @@ export async function POST(request) {
       data: {
         userId: user.id,
         slug: finalSlug,
-        data: folderData,
+        data: stringifyJsonText(folderData),
       },
     });
 
     return NextResponse.json(
-      { folder: folder.data },
+      { folder: folderData },
       { status: 201, headers: NO_CACHE_HEADERS }
     );
   } catch (error) {

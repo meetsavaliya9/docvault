@@ -8,203 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum PaymentStatus {
-  PENDING
-  SUCCESS
-  FAILED
-  REFUNDED
-}
-
-enum Permission {
-  VIEW_DOCUMENTS
-  UPLOAD_DOCUMENT
-  DOWNLOAD_DOCUMENT
-  DELETE_DOCUMENT
-  RESTORE_DOCUMENT
-  EMPTY_TRASH
-  SHARE_DOCUMENT
-  RENAME_DOCUMENT
-  VIEW_TRASH
-  VIEW_SUBSCRIPTION
-}
-
-model User {
-  id               String         @id @default(cuid())
-  email            String         @unique @db.VarChar(320)
-  name             String?        @db.VarChar(120)
-  passwordHash     String         @db.VarChar(200)
-  isBlocked        Boolean        @default(false)
-  stripeCustomerId String?        @unique @db.VarChar(255)
-  createdAt        DateTime       @default(now())
-  sessions         Session[]
-  userPermissions  UserPermission[]
-  documents        Document[]
-  folders          Folder[]
-  trashItems       TrashItem[]
-  otpChallenges    OtpChallenge[]
-  subscriptions    Subscription[]
-  payments         Payment[]
-}
-
-model UserPermission {
-  id         String     @id @default(cuid())
-  userId     String
-  permission Permission
-  enabled    Boolean    @default(true)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, permission])
-  @@index([permission, enabled])
-}
-
-model SubscriptionPlan {
-  id                String         @id @db.VarChar(40)
-  slug              String         @unique @db.VarChar(40)
-  name              String         @unique @db.VarChar(80)
-  price             Int
-  currency          String         @default("INR") @db.VarChar(3)
-  billingPeriod     String         @default("monthly") @db.VarChar(20)
-  razorpayPlanId    String?        @unique @db.VarChar(255)
-  description       String         @db.VarChar(500)
-  features          Json
-  documentLimit     Int?
-  storageLimitBytes BigInt
-  isActive          Boolean        @default(true)
-  isRecommended     Boolean        @default(false)
-  displayOrder      Int            @default(0)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  subscriptions     Subscription[]
-  payments          Payment[]
-
-  @@index([isActive, displayOrder])
-}
-
-model Subscription {
-  id                   String            @id @default(cuid())
-  userId               String
-  provider             String            @default("stripe") @db.VarChar(20)
-  stripeSubscriptionId String?           @unique @db.VarChar(255)
-  stripePriceId        String?           @db.VarChar(255)
-  planKey              String?           @db.VarChar(40)
-  planId               String?           @db.VarChar(40)
-  status               String            @db.VarChar(40)
-  startDate            DateTime?
-  endDate              DateTime?
-  currentPeriodEnd     DateTime?
-  cancelAtPeriodEnd    Boolean           @default(false)
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan                 SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
-  payments             Payment[]
-
-  @@index([userId, status])
-  @@index([userId, planKey, endDate])
-}
-
-model Payment {
-  id                String            @id @default(cuid())
-  userId            String
-  subscriptionId    String?
-  planId            String?           @db.VarChar(40)
-  planName          String            @default("") @db.VarChar(80)
-  billingPeriod     String            @default("monthly") @db.VarChar(20)
-  razorpayOrderId   String            @unique @db.VarChar(255)
-  razorpayPaymentId String?           @unique @db.VarChar(255)
-  razorpaySignature String?           @db.Char(64)
-  amount            Int
-  amountPaid        Int               @default(0)
-  currency          String            @default("INR") @db.VarChar(3)
-  status            PaymentStatus     @default(PENDING)
-  refundedAmount    Int               @default(0)
-  plan              String            @db.VarChar(40)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription      Subscription?     @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  planDetails       SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
-  refunds           PaymentRefund[]
-
-  @@index([userId, status])
-  @@index([subscriptionId])
-  @@index([planId])
-}
-
-model PaymentRefund {
-  id               String    @id @default(cuid())
-  razorpayRefundId String    @unique @db.VarChar(255)
-  paymentId        String
-  amount           Int
-  currency         String    @db.VarChar(3)
-  status           String    @db.VarChar(30)
-  processedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  payment          Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-
-  @@index([paymentId, status])
-}
-
-model SubscriptionPlanPricing {
-  planKey        String   @id @db.VarChar(40)
-  amount         Int
-  razorpayPlanId String?  @db.VarChar(255)
-  updatedAt      DateTime @updatedAt
-}
-
-model RazorpayPlan {
-  providerPlanId String   @id @db.VarChar(255)
-  planKey        String   @db.VarChar(40)
-  amount         Int
-  createdAt      DateTime @default(now())
-
-  @@index([planKey])
-}
-
-model EmailVerification {
-  id           String   @id @default(cuid())
-  email        String   @unique @db.VarChar(320)
-  name         String?  @db.VarChar(120)
-  passwordHash String   @db.VarChar(200)
-  otpHash      String   @db.Char(64)
-  expiresAt    DateTime
-  attempts     Int      @default(0)
-  lastSentAt   DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([email])
-  @@index([expiresAt])
-}
-
-model OtpChallenge {
-  id        String   @id @default(cuid())
-  userId    String
-  codeHash  String   @db.Char(64)
-  expiresAt DateTime
-  attempts  Int      @default(0)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([expiresAt])
-}
-
-model Session {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique @db.Char(64)
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expiresAt])
-}
-
 model Document {
   id                     String   @id @db.VarChar(100)
   userId                 String
@@ -219,32 +22,275 @@ model Document {
   folderSlug             String   @db.VarChar(120)
   hash                   String?  @db.VarChar(100)
   fileData               String?  @db.LongText
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime
   cloudinaryPublicId     String?  @db.VarChar(255)
   cloudinaryResourceType String?  @db.VarChar(20)
   cloudinaryVersion      Int?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Document_userId_fkey")
 
-  @@index([userId, createdAt])
-  @@index([userId, folderSlug])
+  @@index([userId, createdAt], map: "Document_userId_createdAt_idx")
+  @@index([userId, folderSlug], map: "Document_userId_folderSlug_idx")
+  @@map("document")
+}
+
+model EmailVerification {
+  id           String   @id
+  email        String   @unique(map: "EmailVerification_email_key") @db.VarChar(320)
+  name         String?  @db.VarChar(120)
+  passwordHash String   @db.VarChar(200)
+  otpHash      String   @db.Char(64)
+  expiresAt    DateTime
+  attempts     Int      @default(0)
+  lastSentAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+
+  @@index([email], map: "EmailVerification_email_idx")
+  @@index([expiresAt], map: "EmailVerification_expiresAt_idx")
+  @@map("emailverification")
 }
 
 model Folder {
-  id     String @id @default(cuid())
+  id     String @id
   userId String
   slug   String @db.VarChar(120)
-  data   Json
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data   String @db.LongText
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Folder_userId_fkey")
 
-  @@unique([userId, slug])
+  @@unique([userId, slug], map: "Folder_userId_slug_key")
+  @@map("folder")
+}
+
+model OtpChallenge {
+  id        String   @id
+  userId    String
+  codeHash  String   @db.Char(64)
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "OtpChallenge_userId_fkey")
+
+  @@index([expiresAt], map: "OtpChallenge_expiresAt_idx")
+  @@index([userId, createdAt], map: "OtpChallenge_userId_createdAt_idx")
+  @@map("otpchallenge")
+}
+
+model Payment {
+  id                String            @id
+  userId            String
+  subscriptionId    String?
+  razorpayOrderId   String            @unique(map: "Payment_razorpayOrderId_key") @db.VarChar(255)
+  razorpayPaymentId String?           @unique(map: "Payment_razorpayPaymentId_key") @db.VarChar(255)
+  razorpaySignature String?           @db.Char(64)
+  amount            Int
+  currency          String            @default("INR") @db.VarChar(3)
+  status            PaymentStatus     @default(PENDING)
+  plan              String            @db.VarChar(40)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime
+  amountPaid        Int               @default(0)
+  billingPeriod     String            @default("monthly") @db.VarChar(20)
+  planId            String?           @db.VarChar(40)
+  planName          String            @default("") @db.VarChar(80)
+  refundedAmount    Int               @default(0)
+  planDetails       SubscriptionPlan? @relation(fields: [planId], references: [id], map: "Payment_planId_fkey")
+  subscription      Subscription?     @relation(fields: [subscriptionId], references: [id], map: "Payment_subscriptionId_fkey")
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Payment_userId_fkey")
+  refunds           PaymentRefund[]
+
+  @@index([planId], map: "Payment_planId_idx")
+  @@index([subscriptionId], map: "Payment_subscriptionId_idx")
+  @@index([userId, status], map: "Payment_userId_status_idx")
+  @@map("payment")
+}
+
+model PaymentRefund {
+  id               String    @id
+  razorpayRefundId String    @unique(map: "PaymentRefund_razorpayRefundId_key") @db.VarChar(255)
+  paymentId        String
+  amount           Int
+  currency         String    @db.VarChar(3)
+  status           String    @db.VarChar(30)
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime
+  payment          Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade, map: "PaymentRefund_paymentId_fkey")
+
+  @@index([paymentId, status], map: "PaymentRefund_paymentId_status_idx")
+  @@map("paymentrefund")
+}
+
+model RazorpayPlan {
+  providerPlanId String   @id @db.VarChar(255)
+  planKey        String   @db.VarChar(40)
+  amount         Int
+  createdAt      DateTime @default(now())
+
+  @@index([planKey], map: "RazorpayPlan_planKey_idx")
+  @@map("razorpayplan")
+}
+
+model Session {
+  id        String   @id
+  tokenHash String   @unique(map: "Session_tokenHash_key") @db.Char(64)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Session_userId_fkey")
+
+  @@index([expiresAt], map: "Session_expiresAt_idx")
+  @@index([userId], map: "Session_userId_idx")
+  @@map("session")
+}
+
+model Subscription {
+  id                   String            @id
+  userId               String
+  stripeSubscriptionId String?           @unique(map: "Subscription_stripeSubscriptionId_key") @db.VarChar(255)
+  stripePriceId        String?           @db.VarChar(255)
+  status               String            @db.VarChar(40)
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean           @default(false)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime
+  provider             String            @default("stripe") @db.VarChar(20)
+  endDate              DateTime?
+  planKey              String?           @db.VarChar(40)
+  startDate            DateTime?
+  planId               String?           @db.VarChar(40)
+  payments             Payment[]
+  plan                 SubscriptionPlan? @relation(fields: [planId], references: [id], map: "Subscription_planId_fkey")
+  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Subscription_userId_fkey")
+
+  @@index([planId], map: "Subscription_planId_fkey")
+  @@index([userId, planKey, endDate], map: "Subscription_userId_planKey_endDate_idx")
+  @@index([userId, status], map: "Subscription_userId_status_idx")
+  @@map("subscription")
+}
+
+model SubscriptionPlan {
+  id                String         @id @db.VarChar(40)
+  slug              String         @unique(map: "SubscriptionPlan_slug_key") @db.VarChar(40)
+  name              String         @unique(map: "SubscriptionPlan_name_key") @db.VarChar(80)
+  price             Int
+  currency          String         @default("INR") @db.VarChar(3)
+  billingPeriod     String         @default("monthly") @db.VarChar(20)
+  description       String         @db.VarChar(500)
+  features          String         @db.LongText
+  documentLimit     Int?
+  storageLimitBytes BigInt
+  isActive          Boolean        @default(true)
+  isRecommended     Boolean        @default(false)
+  displayOrder      Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime
+  razorpayPlanId    String?        @unique(map: "SubscriptionPlan_razorpayPlanId_key") @db.VarChar(255)
+  payments          Payment[]
+  subscriptions     Subscription[]
+
+  @@index([isActive, displayOrder], map: "SubscriptionPlan_isActive_displayOrder_idx")
+  @@map("subscriptionplan")
+}
+
+model SubscriptionPlanPricing {
+  planKey        String   @id @db.VarChar(40)
+  amount         Int
+  updatedAt      DateTime
+  razorpayPlanId String?  @db.VarChar(255)
+  @@map("subscriptionplanpricing")
 }
 
 model TrashItem {
   id     String @id @db.VarChar(100)
   userId String
-  data   Json
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data   String @db.LongText
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "TrashItem_userId_fkey")
 
-  @@index([userId])
+  @@index([userId], map: "TrashItem_userId_idx")
+  @@map("trashitem")
+}
+
+model User {
+  id               String           @id
+  email            String           @unique(map: "User_email_key") @db.VarChar(320)
+  passwordHash     String           @db.VarChar(200)
+  createdAt        DateTime         @default(now())
+  name             String?          @db.VarChar(120)
+  isBlocked        Boolean          @default(false)
+  stripeCustomerId String?          @unique(map: "User_stripeCustomerId_key") @db.VarChar(255)
+  documents        Document[]
+  folders          Folder[]
+  otpChallenges    OtpChallenge[]
+  payments         Payment[]
+  sessions         Session[]
+  subscriptions    Subscription[]
+  trashItems       TrashItem[]
+  userPermissions  UserPermission[]
+
+  @@map("user")
+}
+
+model UserPermission {
+  id         String                    @id
+  userId     String
+  permission Permission
+  enabled    Boolean                   @default(true)
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @default(now())
+  user       User                      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "UserPermission_userId_fkey")
+
+  @@unique([userId, permission], map: "UserPermission_userId_permission_key")
+  @@index([permission, enabled], map: "UserPermission_permission_enabled_idx")
+  @@map("userpermission")
+}
+
+enum Permission {
+  VIEW_DASHBOARD
+  VIEW_DASHBOARD_STATS
+  VIEW_RECENT_DOCUMENTS
+  VIEW_STORAGE_USAGE
+  VIEW_DOCUMENTS
+  UPLOAD_DOCUMENT
+  DOWNLOAD_DOCUMENT
+  DELETE_DOCUMENT
+  PERMANENT_DELETE_DOCUMENT
+  RENAME_DOCUMENT
+  VIEW_DOCUMENT_DETAILS
+  SEARCH_DOCUMENTS
+  SEARCH_BY_NAME
+  SEARCH_BY_TYPE
+  SORT_DOCUMENTS
+  FILTER_DOCUMENTS
+  PREVIEW_DOCUMENT
+  MANAGE_STARRED_DOCUMENTS
+  VIEW_FOLDERS
+  CREATE_FOLDER
+  RENAME_FOLDER
+  DELETE_FOLDER
+  MOVE_DOCUMENT
+  VIEW_STARRED
+  RESTORE_DOCUMENT
+  EMPTY_TRASH
+  SHARE_DOCUMENT
+  VIEW_TRASH
+  VIEW_SUBSCRIPTION
+  VIEW_PLANS
+  CHANGE_SUBSCRIPTION
+  MANAGE_SUBSCRIPTION
+  VIEW_PAYMENT_HISTORY
+  VIEW_NOTIFICATIONS
+  MANAGE_NOTIFICATIONS
+  MARK_NOTIFICATION_READ
+
+  @@map("userpermission_permission")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+
+  @@map("payment_status")
 }

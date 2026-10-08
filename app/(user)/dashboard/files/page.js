@@ -42,6 +42,11 @@ export default function FilesPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [targetFolderSlug, setTargetFolderSlug] = useState("work");
   const canViewDocuments = hasPermission("VIEW_DOCUMENTS");
+  const canSearchDocuments = hasPermission("SEARCH_DOCUMENTS");
+  const canSearchByName = hasPermission("SEARCH_BY_NAME");
+  const canSearchByType = hasPermission("SEARCH_BY_TYPE");
+  const canFilterDocuments = hasPermission("FILTER_DOCUMENTS");
+  const canSortDocuments = hasPermission("SORT_DOCUMENTS");
 
   const confirmDeleteFile = () => {
     if (!pendingDeleteFile) return;
@@ -83,11 +88,14 @@ export default function FilesPage() {
   const filteredAndSorted = useMemo(() => {
     return documents
       .filter((doc) => {
-        const matchesSearch =
-          doc.name.toLowerCase().includes(search.toLowerCase()) ||
-          doc.type.toLowerCase().includes(search.toLowerCase());
+        const matchesSearch = !search || (
+          canSearchDocuments &&
+          ((canSearchByName && doc.name.toLowerCase().includes(search.toLowerCase())) ||
+            (canSearchByType && doc.type.toLowerCase().includes(search.toLowerCase())))
+        );
 
         if (!matchesSearch) return false;
+        if (!canFilterDocuments) return true;
 
         // Folder filter
         if (selectedFolder !== "all") {
@@ -108,11 +116,12 @@ export default function FilesPage() {
         return true;
       })
       .sort((a, b) => {
+        if (!canSortDocuments) return 0;
         if (sortBy === "name") return a.name.localeCompare(b.name);
         if (sortBy === "size") return (b.rawBytes || 0) - (a.rawBytes || 0);
         return 0;
       });
-  }, [documents, search, selectedType, selectedFolder, sortBy]);
+  }, [documents, search, selectedType, selectedFolder, sortBy, canSearchDocuments, canSearchByName, canSearchByType, canFilterDocuments, canSortDocuments]);
 
   if (!canViewDocuments) return null;
 
@@ -131,6 +140,7 @@ export default function FilesPage() {
 
         {/* Upload Action with Folder Picker */}
         {hasPermission("UPLOAD_DOCUMENT") && <div className="flex items-center gap-2 w-full sm:w-auto">
+          {hasPermission("VIEW_FOLDERS") && (
           <select
             value={targetFolderSlug}
             onChange={(e) => setTargetFolderSlug(e.target.value)}
@@ -143,6 +153,7 @@ export default function FilesPage() {
               </option>
             ))}
           </select>
+          )}
 
           <label className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-blue-500/20 cursor-pointer active:scale-95 transition-all">
             <PlusIcon className="w-4 h-4 shrink-0" />
@@ -183,7 +194,7 @@ export default function FilesPage() {
       {/* Filter and Control Bar */}
       <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Search */}
-        <div className="relative flex-1 max-w-md">
+        {hasPermission("SEARCH_DOCUMENTS") && (canSearchByName || canSearchByType) && <div className="relative flex-1 max-w-md">
           <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
@@ -200,13 +211,14 @@ export default function FilesPage() {
               <XIcon className="w-3.5 h-3.5" />
             </button>
           )}
-        </div>
+        </div>}
 
         {/* Filter Pills */}
+        {hasPermission("FILTER_DOCUMENTS") && (
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
           {[
             { id: "all", label: "All Files" },
-            { id: "starred", label: "Starred" },
+            ...(hasPermission("VIEW_STARRED") ? [{ id: "starred", label: "Starred" }] : []),
             { id: "pdf", label: "PDFs" },
             { id: "docx", label: "Word Docs" },
             { id: "sheet", label: "Sheets" },
@@ -225,11 +237,12 @@ export default function FilesPage() {
             </button>
           ))}
         </div>
+        )}
 
         {/* Sort, Folder Filter & View Mode Toggle */}
         <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto justify-between md:justify-end">
           {/* Folder filter dropdown */}
-          <select
+          {hasPermission("FILTER_DOCUMENTS") && hasPermission("VIEW_FOLDERS") && <select
             value={selectedFolder}
             onChange={(e) => setSelectedFolder(e.target.value)}
             className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer hover:border-slate-300 max-w-[130px] sm:max-w-none truncate"
@@ -240,10 +253,10 @@ export default function FilesPage() {
                 {f.name}
               </option>
             ))}
-          </select>
+          </select>}
 
           {/* Sort Dropdown */}
-          <select
+          {hasPermission("SORT_DOCUMENTS") && <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer hover:border-slate-300"
@@ -251,7 +264,7 @@ export default function FilesPage() {
             <option value="newest">Newest First</option>
             <option value="name">Name (A-Z)</option>
             <option value="size">Largest Size</option>
-          </select>
+          </select>}
 
           {/* View Mode Switch */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
@@ -298,7 +311,7 @@ export default function FilesPage() {
               <div>
                 <div className="flex items-start justify-between mb-3">
                   <FileIconBox type={doc.type} className="w-12 h-12" />
-                  <button
+                  {hasPermission("MANAGE_STARRED_DOCUMENTS") && <button
                     onClick={() => toggleStar(doc.id)}
                     className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
                       doc.starred
@@ -308,12 +321,12 @@ export default function FilesPage() {
                     title={doc.starred ? "Unstar" : "Star"}
                   >
                     <StarIcon className="w-4 h-4" filled={doc.starred} />
-                  </button>
+                  </button>}
                 </div>
 
                 <h3
-                  onClick={() => setViewFile(doc)}
-                  className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-2 cursor-pointer group-hover:text-blue-600 transition-colors"
+                  onClick={hasPermission("VIEW_DOCUMENT_DETAILS") ? () => setViewFile(doc) : undefined}
+                  className={`font-bold text-slate-900 text-xs sm:text-sm line-clamp-2 ${hasPermission("VIEW_DOCUMENT_DETAILS") ? "cursor-pointer group-hover:text-blue-600 transition-colors" : ""}`}
                 >
                   {doc.name}
                 </h3>
@@ -338,13 +351,13 @@ export default function FilesPage() {
                 </span>
 
                 <div className="flex items-center gap-1">
-                  <button
+                  {hasPermission("VIEW_DOCUMENT_DETAILS") && <button
                     onClick={() => setViewFile(doc)}
                     className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                     title="View details"
                   >
                     <EyeIcon className="w-4 h-4" />
-                  </button>
+                  </button>}
                   {hasPermission("DOWNLOAD_DOCUMENT") && <button
                     onClick={() => downloadDocument(doc)}
                     className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
@@ -390,7 +403,7 @@ export default function FilesPage() {
                   >
                     <td className="py-3 sm:py-3.5 px-3 sm:px-5">
                       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                        <button
+                        {hasPermission("MANAGE_STARRED_DOCUMENTS") && <button
                           onClick={() => toggleStar(doc.id)}
                           className={`p-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
                             doc.starred
@@ -399,12 +412,12 @@ export default function FilesPage() {
                           }`}
                         >
                           <StarIcon className="w-4 h-4" filled={doc.starred} />
-                        </button>
+                        </button>}
                         <FileIconBox type={doc.type} className="w-8 h-8 shrink-0" />
                         <div className="min-w-0">
                           <span
-                            onClick={() => setViewFile(doc)}
-                            className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors cursor-pointer truncate block max-w-[120px] xs:max-w-[170px] sm:max-w-xs md:max-w-md"
+                            onClick={hasPermission("VIEW_DOCUMENT_DETAILS") ? () => setViewFile(doc) : undefined}
+                            className={`font-semibold text-slate-800 truncate block max-w-[120px] xs:max-w-[170px] sm:max-w-xs md:max-w-md ${hasPermission("VIEW_DOCUMENT_DETAILS") ? "group-hover:text-blue-600 transition-colors cursor-pointer" : ""}`}
                           >
                             {doc.name}
                           </span>
@@ -445,13 +458,13 @@ export default function FilesPage() {
 
                     <td className="py-3 sm:py-3.5 px-3 sm:px-5 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button
+                        {hasPermission("PREVIEW_DOCUMENT") && <button
                           onClick={() => setViewFile(doc)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                           title="Preview"
                         >
                           <EyeIcon className="w-4 h-4" />
-                        </button>
+                        </button>}
                         {hasPermission("DOWNLOAD_DOCUMENT") && <button
                           onClick={() => downloadDocument(doc)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
@@ -488,7 +501,7 @@ export default function FilesPage() {
           <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
             We couldn&apos;t find anything matching your filter criteria. Try clearing your search or uploading a new file.
           </p>
-          <button
+          {(hasPermission("SEARCH_DOCUMENTS") || hasPermission("FILTER_DOCUMENTS")) && <button
             onClick={() => {
               setSearch("");
               setSelectedType("all");
@@ -497,12 +510,12 @@ export default function FilesPage() {
             className="mt-4 px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700 transition-colors cursor-pointer"
           >
             Clear Filters
-          </button>
+          </button>}
         </div>
       )}
 
       {/* File Preview & Details Modal */}
-      {viewFile && (
+      {(hasPermission("VIEW_DOCUMENT_DETAILS") || hasPermission("PREVIEW_DOCUMENT")) && viewFile && (
         <div
           onClick={() => setViewFile(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150"
@@ -535,7 +548,7 @@ export default function FilesPage() {
             </div>
 
             {/* Document Details Grid */}
-            <div className="my-5 p-4 rounded-2xl bg-slate-50 border border-slate-100 grid grid-cols-2 gap-4 text-xs">
+            {hasPermission("VIEW_DOCUMENT_DETAILS") && <div className="my-5 p-4 rounded-2xl bg-slate-50 border border-slate-100 grid grid-cols-2 gap-4 text-xs">
               <div>
                 <p className="text-slate-400 font-medium">Document Format</p>
                 <p className="font-bold text-slate-800 mt-0.5">{viewFile.type} File</p>
@@ -552,10 +565,10 @@ export default function FilesPage() {
                 <p className="text-slate-400 font-medium">Vault Folder</p>
                 <p className="font-bold text-blue-600 mt-0.5">{viewFile.folder}</p>
               </div>
-            </div>
+            </div>}
 
             {/* Simulated / Real Content Preview */}
-            <div className="p-6 rounded-2xl bg-blue-50/50 border border-blue-100 flex flex-col items-center justify-center text-center mb-6">
+            {hasPermission("PREVIEW_DOCUMENT") && <div className="p-6 rounded-2xl bg-blue-50/50 border border-blue-100 flex flex-col items-center justify-center text-center mb-6">
               {viewFile.dataUrl && isImageDocument(viewFile) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -575,7 +588,7 @@ export default function FilesPage() {
                   {viewFile.hash || "e83f21...c82a1"}
                 </code>
               </p>
-            </div>
+            </div>}
 
             {/* Modal Actions */}
             <div className="flex items-center gap-3">

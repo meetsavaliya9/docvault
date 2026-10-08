@@ -89,6 +89,8 @@ export default function DashboardPage() {
     };
   }, [documents]);
 
+  if (!hasPermission("VIEW_DASHBOARD")) return null;
+
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-6 lg:p-8">
       {/* Hero Welcome Banner */}
@@ -163,7 +165,7 @@ export default function DashboardPage() {
       </section>}
 
       {/* KPI Analytics Cards */}
-      {canViewDocuments && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {hasPermission("VIEW_DASHBOARD_STATS") && canViewDocuments && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Total Documents */}
         <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 group">
           <div className="flex items-center justify-between">
@@ -213,7 +215,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Starred Documents */}
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 group">
+        {hasPermission("VIEW_STARRED") && <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Starred Files
@@ -233,7 +235,7 @@ export default function DashboardPage() {
           <p className="mt-2 text-xs text-slate-400">
             Bookmarked for priority
           </p>
-        </div>
+        </div>}
 
         {/* Security Status */}
         <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 group">
@@ -260,7 +262,7 @@ export default function DashboardPage() {
       </div>}
 
       {/* Storage Breakdown Multi-Bar */}
-      {canViewDocuments && <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+      {hasPermission("VIEW_STORAGE_USAGE") && canViewDocuments && <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
             <h3 className="text-base font-bold text-slate-900">
@@ -321,7 +323,7 @@ export default function DashboardPage() {
       </div>}
 
       {/* Quick Folders Section */}
-      {canViewDocuments && <div>
+      {hasPermission("VIEW_FOLDERS") && <div>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900 tracking-tight">
@@ -331,13 +333,13 @@ export default function DashboardPage() {
               Browse organized categories
             </p>
           </div>
-          <Link
+          {hasPermission("VIEW_FOLDERS") && <Link
             href="/dashboard/folders"
             className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
           >
             All folders ({folders.length})
             <ChevronRightIcon className="w-3.5 h-3.5" />
-          </Link>
+          </Link>}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -369,7 +371,7 @@ export default function DashboardPage() {
       </div>}
 
       {/* Recent Documents Table */}
-      {canViewDocuments && <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {hasPermission("VIEW_RECENT_DOCUMENTS") && canViewDocuments && <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900 tracking-tight">
@@ -382,38 +384,38 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600">
-              <button
+              {hasPermission("FILTER_DOCUMENTS") && <button
                 onClick={() => setActiveTab("all")}
                 className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                   activeTab === "all" ? "bg-white text-slate-900 shadow-xs" : "hover:text-slate-900"
                 }`}
               >
                 All
-              </button>
-              <button
+              </button>}
+              {hasPermission("FILTER_DOCUMENTS") && hasPermission("VIEW_STARRED") && <button
                 onClick={() => setActiveTab("starred")}
                 className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                   activeTab === "starred" ? "bg-white text-slate-900 shadow-xs" : "hover:text-slate-900"
                 }`}
               >
                 Starred ({starredDocuments.length})
-              </button>
-              <button
+              </button>}
+              {hasPermission("FILTER_DOCUMENTS") && <button
                 onClick={() => setActiveTab("pdf")}
                 className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                   activeTab === "pdf" ? "bg-white text-slate-900 shadow-xs" : "hover:text-slate-900"
                 }`}
               >
                 PDFs
-              </button>
+              </button>}
             </div>
 
-            <Link
+            {hasPermission("VIEW_DOCUMENTS") && <Link
               href="/dashboard/files"
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
             >
               View Full Vault →
-            </Link>
+            </Link>}
           </div>
         </div>
 
@@ -441,8 +443,8 @@ export default function DashboardPage() {
                       <FileIconBox type={doc.type} className="w-9 h-9 shrink-0" />
                       <div className="min-w-0">
                         <p
-                          onClick={() => setPreviewFile(doc)}
-                          className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors truncate max-w-xs sm:max-w-sm cursor-pointer"
+                          onClick={hasPermission("VIEW_DOCUMENT_DETAILS") ? () => setPreviewFile(doc) : undefined}
+                          className={`font-semibold text-slate-800 truncate max-w-xs sm:max-w-sm ${hasPermission("VIEW_DOCUMENT_DETAILS") ? "group-hover:text-blue-600 transition-colors cursor-pointer" : ""}`}
                         >
                           {doc.name}
                         </p>
@@ -474,7 +476,7 @@ export default function DashboardPage() {
 
                   <td className="py-3.5 px-5 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button
+                      {hasPermission("MANAGE_STARRED_DOCUMENTS") && <button
                         onClick={() => toggleStar(doc.id)}
                         className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                           doc.starred
@@ -484,15 +486,15 @@ export default function DashboardPage() {
                         title={doc.starred ? "Remove Star" : "Add to Starred"}
                       >
                         <StarIcon className="w-4 h-4" filled={doc.starred} />
-                      </button>
+                      </button>}
 
-                      <button
+                      {hasPermission("VIEW_DOCUMENT_DETAILS") && <button
                         onClick={() => setPreviewFile(doc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                         title="Preview Document"
                       >
                         <EyeIcon className="w-4 h-4" />
-                      </button>
+                      </button>}
 
                       {hasPermission("DOWNLOAD_DOCUMENT") && <button
                         onClick={() => downloadDocument(doc)}
@@ -511,7 +513,7 @@ export default function DashboardPage() {
       </div>}
 
       {/* Quick Preview Modal */}
-      {canViewDocuments && previewFile && (
+      {hasPermission("VIEW_DOCUMENT_DETAILS") && previewFile && (
         <div
           onClick={() => setPreviewFile(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150"
@@ -542,7 +544,7 @@ export default function DashboardPage() {
 
             {/* Document Content / Image Preview */}
             <div className="my-6 p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center text-center">
-              {previewFile.dataUrl && isImageDocument(previewFile) ? (
+              {hasPermission("PREVIEW_DOCUMENT") && previewFile.dataUrl && isImageDocument(previewFile) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewFile.dataUrl}

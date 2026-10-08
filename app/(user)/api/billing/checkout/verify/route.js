@@ -11,7 +11,7 @@ export async function POST(request) {
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
   }
-  if (!(await hasPermission(user, "VIEW_SUBSCRIPTION"))) {
+  if (!(await hasPermission(user, "CHANGE_SUBSCRIPTION"))) {
     return NextResponse.json({ error: "You do not have permission to manage subscriptions." }, { status: 403 });
   }
 

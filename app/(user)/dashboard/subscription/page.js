@@ -68,6 +68,9 @@ function loadRazorpayCheckout() {
 
 export default function SubscriptionPage() {
   const { hasPermission } = useVault();
+  const canViewPlans = hasPermission("VIEW_PLANS");
+  const canChangeSubscription = hasPermission("CHANGE_SUBSCRIPTION");
+  const canManageSubscription = hasPermission("MANAGE_SUBSCRIPTION");
   const [billing, setBilling] = useState(null);
   const [plans, setPlans] = useState([]);
   const [razorpayKeyId, setRazorpayKeyId] = useState(null);
@@ -83,13 +86,15 @@ export default function SubscriptionPage() {
   const fetchData = useCallback(async () => {
     const [billingResponse, plansResponse] = await Promise.all([
       fetch("/api/billing", { cache: "no-store" }),
-      fetch("/api/subscription/plans", { cache: "no-store" }),
+      canViewPlans
+        ? fetch("/api/subscription/plans", { cache: "no-store" })
+        : Promise.resolve(null),
     ]);
     const [billingResult, plansResult] = await Promise.all([
       billingResponse.json(),
-      plansResponse.json(),
+      plansResponse ? plansResponse.json() : Promise.resolve({ plans: [] }),
     ]);
-    if (!billingResponse.ok || !plansResponse.ok) {
+    if (!billingResponse.ok || (plansResponse && !plansResponse.ok)) {
       throw new Error("Could not load subscription details. Please try again.");
     }
     return {
@@ -103,7 +108,7 @@ export default function SubscriptionPage() {
       })),
       razorpayKeyId: plansResult.razorpayKeyId || null,
     };
-  }, []);
+  }, [canViewPlans]);
 
   const loadData = useCallback(async () => {
     const result = await fetchData();
@@ -373,7 +378,7 @@ export default function SubscriptionPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-7 p-4 sm:p-6 lg:p-8">
-      <header className="text-center">
+      {canViewPlans && <header className="text-center">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
           DocVault plans
         </p>
@@ -384,7 +389,7 @@ export default function SubscriptionPage() {
           Securely manage your documents with storage and tools that grow with you.
           Plan details and pricing are provided by DocVault.
         </p>
-      </header>
+      </header>}
 
       {billing && (
         <section className="flex flex-col justify-between gap-4 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-5 sm:flex-row sm:items-center">
@@ -411,7 +416,7 @@ export default function SubscriptionPage() {
         </section>
       )}
 
-      {billing?.latestPayment?.refundedAmount > 0 && (
+      {hasPermission("VIEW_PAYMENT_HISTORY") && billing?.latestPayment?.refundedAmount > 0 && (
         <p
           role="status"
           className={`rounded-xl border p-4 text-sm ${
@@ -457,14 +462,14 @@ export default function SubscriptionPage() {
         </section>
       )}
 
-      {!razorpayKeyId && (
+      {canChangeSubscription && !razorpayKeyId && (
         <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Test checkout is not configured. Add Razorpay Test Mode credentials to the server
           environment and restart the app.
         </p>
       )}
 
-      <div className="flex justify-end">
+      {canViewPlans && <div className="flex justify-end">
         <button
           type="button"
           onClick={handleRefresh}
@@ -473,9 +478,9 @@ export default function SubscriptionPage() {
         >
           {refreshing ? "Refreshing plans…" : "Refresh plans"}
         </button>
-      </div>
+      </div>}
 
-      <section className="grid items-stretch gap-5 sm:grid-cols-2 2xl:grid-cols-4">
+      {canViewPlans && <section className="grid items-stretch gap-5 sm:grid-cols-2 2xl:grid-cols-4">
         {plans.map((plan) => {
           const isCurrent = currentPlan === plan.key;
           const isLowerTier =
@@ -539,7 +544,7 @@ export default function SubscriptionPage() {
                 <button
                   type="button"
                   onClick={downgradeToFree}
-                  disabled={Boolean(busy) || billing.cancelAtPeriodEnd}
+                  disabled={!canManageSubscription || Boolean(busy) || billing.cancelAtPeriodEnd}
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
                   {billing.cancelAtPeriodEnd
@@ -560,7 +565,7 @@ export default function SubscriptionPage() {
                 <button
                   type="button"
                   onClick={() => startCheckout(plan)}
-                  disabled={Boolean(busy) || !plan.checkoutAvailable}
+                  disabled={!canChangeSubscription || Boolean(busy) || !plan.checkoutAvailable}
                   className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:bg-slate-300"
                 >
                   {busy === `create:${plan.key}`
@@ -582,13 +587,13 @@ export default function SubscriptionPage() {
             </article>
           );
         })}
-      </section>
+      </section>}
 
-      <p className="text-center text-xs leading-5 text-slate-500">
+      {canViewPlans && <p className="text-center text-xs leading-5 text-slate-500">
         Payments are processed securely by Razorpay. DocVault never stores card numbers,
         CVV, UPI PINs, or banking credentials. Plans do not auto-renew; renew from this
         page when you are ready.
-      </p>
+      </p>}
       <div className="text-center">
         <Link href="/dashboard" className="text-sm font-semibold text-blue-700 hover:text-blue-800">
           Back to dashboard

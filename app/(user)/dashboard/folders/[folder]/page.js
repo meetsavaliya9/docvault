@@ -67,8 +67,6 @@ export default function FolderPage({ params }) {
     }
   };
 
-  if (!hasPermission("VIEW_DOCUMENTS")) return null;
-
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Breadcrumb Navigation */}
@@ -91,7 +89,9 @@ export default function FolderPage({ params }) {
               {currentFolder.name}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              {folderFiles.length} documents encrypted in this folder • {currentFolder.description}
+              {hasPermission("VIEW_DOCUMENTS")
+                ? `${folderFiles.length} documents encrypted in this folder • ${currentFolder.description}`
+                : currentFolder.description}
             </p>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function FolderPage({ params }) {
       </div>
 
       {/* Files in Folder Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {hasPermission("VIEW_DOCUMENTS") && <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-bold text-sm text-slate-900">
             Documents in {currentFolder.name}
@@ -135,7 +135,7 @@ export default function FolderPage({ params }) {
                 <tr key={doc.id} className="hover:bg-slate-50/60 transition-colors group">
                   <td className="py-3.5 px-5">
                     <div className="flex items-center gap-3">
-                      <button
+                      {hasPermission("MANAGE_STARRED_DOCUMENTS") && <button
                         onClick={() => toggleStar(doc.id)}
                         className={`p-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
                           doc.starred
@@ -144,11 +144,11 @@ export default function FolderPage({ params }) {
                         }`}
                       >
                         <StarIcon className="w-4 h-4" filled={doc.starred} />
-                      </button>
+                      </button>}
                       <FileIconBox type={doc.type} className="w-8 h-8" />
                       <span
-                        onClick={() => setPreviewFile(doc)}
-                        className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors cursor-pointer truncate max-w-xs sm:max-w-md"
+                        onClick={hasPermission("VIEW_DOCUMENT_DETAILS") ? () => setPreviewFile(doc) : undefined}
+                        className={`font-semibold text-slate-800 truncate max-w-xs sm:max-w-md ${hasPermission("VIEW_DOCUMENT_DETAILS") ? "group-hover:text-blue-600 transition-colors cursor-pointer" : ""}`}
                       >
                         {doc.name}
                       </span>
@@ -171,13 +171,13 @@ export default function FolderPage({ params }) {
                   </td>
                   <td className="py-3.5 px-5 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button
+                      {hasPermission("VIEW_DOCUMENT_DETAILS") && <button
                         onClick={() => setPreviewFile(doc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                         title="View Details"
                       >
                         <EyeIcon className="w-4 h-4" />
-                      </button>
+                      </button>}
                       {hasPermission("DOWNLOAD_DOCUMENT") && <button
                         onClick={() => downloadDocument(doc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
@@ -224,10 +224,10 @@ export default function FolderPage({ params }) {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
       {/* Preview Modal */}
-      {previewFile && (
+      {(hasPermission("VIEW_DOCUMENT_DETAILS") || hasPermission("PREVIEW_DOCUMENT")) && previewFile && (
         <div
           onClick={() => setPreviewFile(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150"
@@ -257,7 +257,7 @@ export default function FolderPage({ params }) {
             </div>
 
             <div className="my-5 p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center text-center">
-              {previewFile.dataUrl && isImageDocument(previewFile) ? (
+              {hasPermission("PREVIEW_DOCUMENT") && previewFile.dataUrl && isImageDocument(previewFile) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewFile.dataUrl}
@@ -267,12 +267,12 @@ export default function FolderPage({ params }) {
               ) : (
                 <ShieldCheckIcon className="w-8 h-8 text-emerald-600 mb-2" />
               )}
-              <p className="text-xs font-bold text-slate-800">
+              {hasPermission("PREVIEW_DOCUMENT") && <p className="text-xs font-bold text-slate-800">
                 Encrypted Vault Document
-              </p>
-              <p className="text-[11px] text-slate-400 mt-1">
+              </p>}
+              {hasPermission("PREVIEW_DOCUMENT") && <p className="text-[11px] text-slate-400 mt-1">
                 Zero-knowledge encrypted with client-side key.
-              </p>
+              </p>}
             </div>
 
             <div className="flex items-center gap-3">

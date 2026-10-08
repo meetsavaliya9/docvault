@@ -12,13 +12,9 @@ export async function GET(request, { params }) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
   }
 
-  if (!(await hasPermission(user, "VIEW_DOCUMENTS"))) {
-    return NextResponse.json({ error: "You do not have permission to view documents." }, { status: 403 });
-  }
-  if (
-    new URL(request.url).searchParams.get("download") === "1" &&
-    !(await hasPermission(user, "DOWNLOAD_DOCUMENT"))
-  ) {
+  const isDownload = new URL(request.url).searchParams.get("download") === "1";
+  const requiredPermission = isDownload ? "DOWNLOAD_DOCUMENT" : "PREVIEW_DOCUMENT";
+  if (!(await hasPermission(user, requiredPermission))) {
     return NextResponse.json({ error: "You do not have permission to download documents." }, { status: 403 });
   }
 
