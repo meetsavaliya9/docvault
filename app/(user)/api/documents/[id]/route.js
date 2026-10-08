@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { mapDocument } from "@/app/lib/documents";
 import { deletePrivateAsset } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,9 @@ export async function PATCH(request, { params }) {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401, headers: NO_CACHE_HEADERS });
+  }
+  if (!(await hasPermission(user, "VIEW_DOCUMENTS"))) {
+    return NextResponse.json({ error: "You do not have permission to view documents." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   const { id } = await params;
@@ -47,6 +51,9 @@ export async function PATCH(request, { params }) {
       { error: "Provide at least one field to update (starred, folder, folderSlug, name)." },
       { status: 400, headers: NO_CACHE_HEADERS }
     );
+  }
+  if (Object.hasOwn(data, "name") && !(await hasPermission(user, "RENAME_DOCUMENT"))) {
+    return NextResponse.json({ error: "You do not have permission to rename documents." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   try {
@@ -81,6 +88,9 @@ export async function DELETE(request, { params }) {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+  if (!(await hasPermission(user, "DELETE_DOCUMENT"))) {
+    return NextResponse.json({ error: "You do not have permission to delete documents." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   const { id } = await params;

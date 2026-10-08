@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { razorpayRequest } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,9 @@ export async function POST() {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+  if (!(await hasPermission(user, "VIEW_SUBSCRIPTION"))) {
+    return NextResponse.json({ error: "You do not have permission to manage subscriptions." }, { status: 403 });
   }
 
   try {

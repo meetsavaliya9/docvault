@@ -5,6 +5,10 @@ import { normalizeDocument } from "./documentUtils";
 
 const VaultContext = createContext(null);
 
+function permissionEnabled(userPermissions, permission) {
+  return userPermissions[permission] !== false;
+}
+
 async function readVaultResponse(response, resource) {
   let result;
   try {
@@ -71,7 +75,7 @@ const DEFAULT_FOLDERS = [
   },
 ];
 
-export function VaultProvider({ children, userId = "", userEmail = "" }) {
+export function VaultProvider({ children, userId = "", userEmail = "", userPermissions = {} }) {
   const [documents, setDocuments] = useState([]);
   const [folders, setFolders] = useState(DEFAULT_FOLDERS);
   const [trash, setTrash] = useState([]);
@@ -94,6 +98,7 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
   const vaultSaveQueue = useRef(Promise.resolve());
+  const trashMutationRef = useRef(null);
   const toastTimerRef = useRef(null);
   const initialLoadDoneRef = useRef(false);
 
@@ -140,21 +145,29 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
     async function loadVault() {
       try {
         const [documentsResponse, vaultResponse, billingResponse] = await Promise.all([
-          fetch("/api/documents", { cache: "no-store" }),
+          permissionEnabled(userPermissions, "VIEW_DOCUMENTS")
+            ? fetch("/api/documents", { cache: "no-store" })
+            : Promise.resolve(null),
           fetch("/api/vault", { cache: "no-store" }),
-          fetch("/api/billing", { cache: "no-store" }),
+          permissionEnabled(userPermissions, "VIEW_SUBSCRIPTION")
+            ? fetch("/api/billing", { cache: "no-store" })
+            : Promise.resolve(null),
         ]);
         const [savedDocumentsResult, savedVault, savedBilling] = await Promise.all([
-          readVaultResponse(documentsResponse, "Documents"),
+          documentsResponse
+            ? readVaultResponse(documentsResponse, "Documents")
+            : Promise.resolve({ documents: [] }),
           readVaultResponse(vaultResponse, "Vault"),
-          readVaultResponse(billingResponse, "Subscription"),
+          billingResponse
+            ? readVaultResponse(billingResponse, "Subscription")
+            : Promise.resolve(null),
         ]);
         if (cancelled) return;
 
         setDocuments((savedDocumentsResult.documents || []).map(normalizeDocument));
         setFolders(savedVault.folders?.length ? savedVault.folders : DEFAULT_FOLDERS);
         setTrash(savedVault.trash || []);
-        setBilling(savedBilling);
+        if (savedBilling) setBilling(savedBilling);
       } catch (error) {
         console.error("Failed to load vault from MySQL:", error);
         if (!cancelled) {
@@ -172,7 +185,7 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
     return () => {
       cancelled = true;
     };
-  }, [userId, userEmail]);
+  }, [userId, userEmail, userPermissions]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -184,12 +197,17 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
     }
 
     const vaultSnapshot = { folders, trash };
+    const trashAction = trashMutationRef.current;
+    trashMutationRef.current = null;
     vaultSaveQueue.current = vaultSaveQueue.current
       .then(async () => {
         const response = await fetch("/api/vault", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(vaultSnapshot),
+          body: JSON.stringify({
+            ...vaultSnapshot,
+            ...(trashAction ? { trashAction } : {}),
+          }),
         });
         if (!response.ok) {
           const result = await response.json();
@@ -402,7 +420,6 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
     setDocuments((prev) =>
       prev.filter((doc) => String(doc.id) !== String(docId))
     );
-    setTrash((prev) => [trashedItem, ...prev]);
 
     try {
       const response = await fetch(`/api/documents/${encodeURIComponent(docId)}`, {
@@ -412,11 +429,12 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
         const result = await response.json();
         throw new Error(result.error || "Could not move document to Trash.");
       }
+      trashMutationRef.current = "add";
+      setTrash((prev) => [trashedItem, ...prev]);
       showToast(`"${docToDelete.name}" moved to Trash.`, "warning");
     } catch (error) {
       console.error("Failed to move document to Trash:", error);
       setDocuments((prev) => [docToDelete, ...prev]);
-      setTrash((prev) => prev.filter((item) => item.id !== trashedItem.id));
       showToast(error.message || "Could not move document to Trash.", "warning");
     }
   };
@@ -455,6 +473,7 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
           throw new Error(result.error || "Could not restore document to MySQL.");
         }
         const { document } = await response.json();
+        trashMutationRef.current = "restore";
         setTrash((prev) =>
           prev.filter((entry) => String(entry.id) !== String(trashId))
         );
@@ -474,6 +493,7 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
     );
     if (!item) return;
 
+    trashMutationRef.current = "delete";
     setTrash((prev) => {
       const nextTrash = prev.filter(
         (t) => t.id !== trashId && String(t.id) !== String(trashId)
@@ -487,6 +507,7 @@ export function VaultProvider({ children, userId = "", userEmail = "" }) {
   // Empty entire Trash
   const emptyTrash = () => {
     if (trash.length === 0) return;
+    trashMutationRef.current = "empty";
     setTrash([]);
     showToast("Trash emptied completely.", "info");
   };
@@ -667,6 +688,8 @@ All permissions and cryptographic checks passed.`;
   const value = {
     userId,
     userEmail,
+    permissions: userPermissions,
+    hasPermission: (permission) => permissionEnabled(userPermissions, permission),
     userName,
     documents,
     folders,

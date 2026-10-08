@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { formatStorageLimit } from "@/lib/billing";
 import { getRazorpayCredentials } from "@/lib/razorpay";
 import { listSubscriptionPlans } from "@/lib/subscriptionPlans";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export async function GET() {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+  if (!(await hasPermission(user, "VIEW_SUBSCRIPTION"))) {
+    return NextResponse.json({ error: "You do not have permission to view subscription plans." }, { status: 403 });
   }
 
   try {

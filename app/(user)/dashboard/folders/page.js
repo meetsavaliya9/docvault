@@ -18,6 +18,7 @@ export default function FoldersPage() {
     documents,
     createFolder,
     deleteFolder,
+    hasPermission,
   } = useVault();
 
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
@@ -66,6 +67,8 @@ export default function FoldersPage() {
       };
     });
   }, [folders, documents]);
+
+  if (!hasPermission("VIEW_DOCUMENTS")) return null;
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-6 lg:p-8">

@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_USER_PERMISSIONS } from "@/lib/permissionConstants";
 import { hashPassword, validateSignupData } from "./session";
 import { sendVerificationOtp, validateSmtpConfig } from "@/lib/email";
 import { logSafeServerError, runSignupDatabaseOperation } from "@/lib/auth/errorDiagnostics";
@@ -353,6 +354,9 @@ export async function verifySignupOtp(email, code) {
               email: normalizedEmail,
               name: pending.name || null,
               passwordHash: pending.passwordHash,
+              userPermissions: {
+                create: DEFAULT_USER_PERMISSIONS.map((permission) => ({ permission, enabled: true })),
+              },
               subscriptions: {
                 create: {
                   provider: "internal",

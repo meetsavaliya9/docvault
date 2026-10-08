@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { getPrivateAssetUrl } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
@@ -9,6 +10,16 @@ export async function GET(request, { params }) {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+
+  if (!(await hasPermission(user, "VIEW_DOCUMENTS"))) {
+    return NextResponse.json({ error: "You do not have permission to view documents." }, { status: 403 });
+  }
+  if (
+    new URL(request.url).searchParams.get("download") === "1" &&
+    !(await hasPermission(user, "DOWNLOAD_DOCUMENT"))
+  ) {
+    return NextResponse.json({ error: "You do not have permission to download documents." }, { status: 403 });
   }
 
   const { id } = await params;

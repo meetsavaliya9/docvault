@@ -29,6 +29,7 @@ export default function FilesPage() {
     moveToTrash,
     uploadFile,
     downloadDocument,
+    hasPermission,
   } = useVault();
 
   const [search, setSearch] = useState("");
@@ -40,6 +41,7 @@ export default function FilesPage() {
   const [pendingDeleteFile, setPendingDeleteFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [targetFolderSlug, setTargetFolderSlug] = useState("work");
+  const canViewDocuments = hasPermission("VIEW_DOCUMENTS");
 
   const confirmDeleteFile = () => {
     if (!pendingDeleteFile) return;
@@ -112,6 +114,8 @@ export default function FilesPage() {
       });
   }, [documents, search, selectedType, selectedFolder, sortBy]);
 
+  if (!canViewDocuments) return null;
+
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Top Header Bar */}
@@ -126,7 +130,7 @@ export default function FilesPage() {
         </div>
 
         {/* Upload Action with Folder Picker */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        {hasPermission("UPLOAD_DOCUMENT") && <div className="flex items-center gap-2 w-full sm:w-auto">
           <select
             value={targetFolderSlug}
             onChange={(e) => setTargetFolderSlug(e.target.value)}
@@ -149,10 +153,11 @@ export default function FilesPage() {
               onChange={handleFileUpload}
             />
           </label>
-        </div>
+        </div>}
       </div>
 
       {/* Drag & Drop Zone */}
+      {hasPermission("UPLOAD_DOCUMENT") && (
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -173,6 +178,7 @@ export default function FilesPage() {
           Real file upload supported: PDF, DOCX, XLSX, PNG, JPG, TXT (encrypted with AES-256)
         </p>
       </div>
+      )}
 
       {/* Filter and Control Bar */}
       <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -339,20 +345,20 @@ export default function FilesPage() {
                   >
                     <EyeIcon className="w-4 h-4" />
                   </button>
-                  <button
+                  {hasPermission("DOWNLOAD_DOCUMENT") && <button
                     onClick={() => downloadDocument(doc)}
                     className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                     title="Download"
                   >
                     <DownloadIcon className="w-4 h-4" />
-                  </button>
-                  <button
+                  </button>}
+                  {hasPermission("DELETE_DOCUMENT") && <button
                     onClick={() => setPendingDeleteFile(doc)}
                     className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                     title="Move to Trash"
                   >
                     <TrashIcon className="w-4 h-4" />
-                  </button>
+                  </button>}
                 </div>
               </div>
             </div>
@@ -446,20 +452,20 @@ export default function FilesPage() {
                         >
                           <EyeIcon className="w-4 h-4" />
                         </button>
-                        <button
+                        {hasPermission("DOWNLOAD_DOCUMENT") && <button
                           onClick={() => downloadDocument(doc)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                           title="Download"
                         >
                           <DownloadIcon className="w-4 h-4" />
-                        </button>
-                        <button
+                        </button>}
+                        {hasPermission("DELETE_DOCUMENT") && <button
                           onClick={() => setPendingDeleteFile(doc)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Move to Trash"
                         >
                           <TrashIcon className="w-4 h-4" />
-                        </button>
+                        </button>}
                       </div>
                     </td>
                   </tr>
@@ -573,7 +579,7 @@ export default function FilesPage() {
 
             {/* Modal Actions */}
             <div className="flex items-center gap-3">
-              <button
+              {hasPermission("DOWNLOAD_DOCUMENT") && <button
                 onClick={() => {
                   downloadDocument(viewFile);
                   setViewFile(null);
@@ -582,8 +588,8 @@ export default function FilesPage() {
               >
                 <DownloadIcon className="w-4 h-4" />
                 Download Decrypted File
-              </button>
-              <button
+              </button>}
+              {hasPermission("DELETE_DOCUMENT") && <button
                 onClick={() => {
                   setPendingDeleteFile(viewFile);
                 }}
@@ -591,7 +597,7 @@ export default function FilesPage() {
               >
                 <TrashIcon className="w-4 h-4" />
                 Move to Trash
-              </button>
+              </button>}
             </div>
           </div>
         </div>

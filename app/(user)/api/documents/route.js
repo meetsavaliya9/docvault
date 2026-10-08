@@ -12,6 +12,7 @@ import {
   uploadPrivateAsset,
 } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,9 @@ export async function GET(request) {
       { error: "You are not signed in." },
       { status: 401, headers: NO_CACHE_HEADERS }
     );
+  }
+  if (!(await hasPermission(user, "VIEW_DOCUMENTS"))) {
+    return NextResponse.json({ error: "You do not have permission to view documents." }, { status: 403, headers: NO_CACHE_HEADERS });
   }
 
   const { searchParams } = new URL(request.url);
@@ -123,6 +127,15 @@ export async function POST(request) {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+
+  const isMultipartUpload = request.headers.get("content-type")?.includes("multipart/form-data");
+  const requiredPermission = isMultipartUpload ? "UPLOAD_DOCUMENT" : "RESTORE_DOCUMENT";
+  if (!(await hasPermission(user, requiredPermission))) {
+    return NextResponse.json({ error: `You do not have permission to ${isMultipartUpload ? "upload documents" : "restore documents"}.` }, { status: 403 });
+  }
+  if (!isMultipartUpload && !(await hasPermission(user, "VIEW_TRASH"))) {
+    return NextResponse.json({ error: "You do not have permission to view or restore Trash items." }, { status: 403 });
   }
 
   let cloudinaryAsset = null;
@@ -230,6 +243,19 @@ export async function POST(request) {
         { error: "Document name, type, and size are required." },
         { status: 400 }
       );
+    }
+
+    if (!isFileUpload) {
+      const trashedDocuments = await prisma.trashItem.findMany({
+        where: { userId: user.id },
+        select: { data: true },
+      });
+      const isRestoringOwnedTrash = trashedDocuments.some(
+        (item) => String(item.data?.originalDoc?.id) === String(fields.id)
+      );
+      if (!isRestoringOwnedTrash) {
+        return NextResponse.json({ error: "Only a document in your Trash can be restored." }, { status: 403 });
+      }
     }
 
     const createdAt = fields.createdAt ? new Date(fields.createdAt) : new Date();

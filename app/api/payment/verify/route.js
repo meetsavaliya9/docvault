@@ -4,6 +4,7 @@ import { activateVerifiedPayment } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionPlanById } from "@/lib/subscriptionPlans";
 import { getRazorpayClient, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
+import { hasPermission } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,9 @@ export async function POST(request) {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+  if (!(await hasPermission(user, "VIEW_SUBSCRIPTION"))) {
+    return NextResponse.json({ error: "You do not have permission to manage subscriptions." }, { status: 403 });
   }
 
   let body;

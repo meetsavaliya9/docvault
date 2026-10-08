@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useVault } from "@/app/(user)/dashboard/lib/vaultContext";
 
 function formatPrice(amount, currency = "INR") {
   return new Intl.NumberFormat("en-IN", {
@@ -66,6 +67,7 @@ function loadRazorpayCheckout() {
 }
 
 export default function SubscriptionPage() {
+  const { hasPermission } = useVault();
   const [billing, setBilling] = useState(null);
   const [plans, setPlans] = useState([]);
   const [razorpayKeyId, setRazorpayKeyId] = useState(null);
@@ -273,6 +275,8 @@ export default function SubscriptionPage() {
       setBusy("");
     }
   };
+
+  if (!hasPermission("VIEW_SUBSCRIPTION")) return null;
 
   if (loading) {
     return (

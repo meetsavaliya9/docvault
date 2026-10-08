@@ -15,6 +15,7 @@ import {
   verifySignupOtp,
 } from "@/app/lib/auth/emailOtp";
 import { createAdminSession, isAdminEmail } from "@/lib/auth/admin";
+import { getUserPermissions, getUserRole } from "@/lib/permissions";
 import {
   logSafeServerError,
   logSignupError,
@@ -39,7 +40,13 @@ export async function GET(_request, { params }) {
       return errorResponse("You are not signed in.", 401);
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json({
+      user: {
+        ...user,
+        role: getUserRole(user),
+        permissions: await getUserPermissions(user),
+      },
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Could not read the session from MySQL:", error);
     return errorResponse(

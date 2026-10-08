@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { deletePrivateAsset } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,9 +24,12 @@ export async function GET() {
   }
 
   try {
+    const canViewTrash = await hasPermission(user, "VIEW_TRASH");
     const [folders, trash] = await Promise.all([
       prisma.folder.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } }),
-      prisma.trashItem.findMany({ where: { userId: user.id }, orderBy: { id: "desc" } }),
+      canViewTrash
+        ? prisma.trashItem.findMany({ where: { userId: user.id }, orderBy: { id: "desc" } })
+        : Promise.resolve([]),
     ]);
 
     return NextResponse.json(
@@ -83,15 +87,80 @@ export async function PUT(request) {
     );
   }
 
+  const trashAction = body.trashAction || null;
+  if (trashAction && !["add", "restore", "delete", "empty"].includes(trashAction)) {
+    return NextResponse.json({ error: "The requested trash action is invalid." }, { status: 400 });
+  }
+
   try {
     const previousTrash = await prisma.trashItem.findMany({
       where: { userId: user.id },
       select: { data: true },
     });
-    const retainedTrashIds = new Set(body.trash.map((item) => item.id));
-    const removedTrashDocuments = previousTrash
-      .filter((item) => !retainedTrashIds.has(item.data?.id))
-      .map((item) => item.data?.originalDoc)
+    const canViewTrash = await hasPermission(user, "VIEW_TRASH");
+    const previousById = new Map(previousTrash.map((item) => [String(item.data?.id), item.data]));
+    const incomingById = new Map(body.trash.map((item) => [String(item.id), item]));
+    const removedTrash = canViewTrash
+      ? [...previousById.entries()].filter(([id]) => !incomingById.has(id))
+      : [];
+    const addedTrash = canViewTrash
+      ? [...incomingById.entries()].filter(([id]) => !previousById.has(id))
+      : [];
+
+    if ((removedTrash.length || addedTrash.length) && !trashAction) {
+      return NextResponse.json({ error: "Trash changes require an explicit authorized action." }, { status: 403 });
+    }
+    if (trashAction && !canViewTrash) {
+      return NextResponse.json({ error: "You do not have permission to view or change Trash." }, { status: 403 });
+    }
+
+    const requiredPermission = {
+      add: "DELETE_DOCUMENT",
+      restore: "RESTORE_DOCUMENT",
+      delete: "DELETE_DOCUMENT",
+      empty: "EMPTY_TRASH",
+    }[trashAction];
+    if (trashAction && !(await hasPermission(user, requiredPermission))) {
+      return NextResponse.json({ error: `You do not have permission to ${trashAction} Trash items.` }, { status: 403 });
+    }
+
+    if (
+      (trashAction === "add" && (addedTrash.length === 0 || removedTrash.length > 0)) ||
+      (trashAction === "restore" && (removedTrash.length === 0 || addedTrash.length > 0)) ||
+      (trashAction === "delete" && (removedTrash.length !== 1 || addedTrash.length > 0)) ||
+      (trashAction === "empty" && (body.trash.length !== 0 || removedTrash.length === 0 || addedTrash.length > 0))
+    ) {
+      return NextResponse.json({ error: "The requested trash change does not match its action." }, { status: 400 });
+    }
+
+    if (trashAction === "restore") {
+      const restoredDocumentIds = removedTrash
+        .map(([, item]) => item?.originalDoc?.id)
+        .filter((id) => typeof id === "string");
+      const restoredDocuments = await prisma.document.findMany({
+        where: { userId: user.id, id: { in: restoredDocumentIds } },
+        select: { id: true },
+      });
+      if (restoredDocuments.length !== removedTrash.length) {
+        return NextResponse.json({ error: "Restored documents must belong to your account." }, { status: 403 });
+      }
+    }
+
+    if (trashAction === "delete" || trashAction === "empty") {
+      const removedDocumentIds = removedTrash
+        .map(([, item]) => item?.originalDoc?.id)
+        .filter((id) => typeof id === "string");
+      const retainedDocuments = await prisma.document.findMany({
+        where: { userId: user.id, id: { in: removedDocumentIds } },
+        select: { id: true },
+      });
+      if (retainedDocuments.length > 0) {
+        return NextResponse.json({ error: "Trash items cannot be permanently removed while their documents are active." }, { status: 409 });
+      }
+    }
+
+    const removedTrashDocuments = removedTrash
+      .map(([, item]) => item?.originalDoc)
       .filter(
         (document) =>
           document &&
@@ -115,11 +184,20 @@ export async function PUT(request) {
             }),
           ]
         : []),
-      prisma.trashItem.deleteMany({ where: { userId: user.id } }),
-      ...(body.trash.length
+      ...(removedTrash.length
+        ? [
+            prisma.trashItem.deleteMany({
+              where: {
+                userId: user.id,
+                id: { in: removedTrash.map(([id]) => `${user.id}-${id}`) },
+              },
+            }),
+          ]
+        : []),
+      ...(addedTrash.length
         ? [
             prisma.trashItem.createMany({
-              data: body.trash.map((item) => ({
+              data: addedTrash.map(([, item]) => ({
                 id: `${user.id}-${item.id}`,
                 userId: user.id,
                 data: item,

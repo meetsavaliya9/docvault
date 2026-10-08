@@ -16,7 +16,11 @@ import {
 } from "@/components/UI/Icons";
 import SignOutButton from "@/components/Auth/SignOutButton";
 
-export default function Sidebar({ className = "", userEmail = "", onNavigate }) {
+export default function Sidebar({
+  className = "",
+  userEmail = "",
+  onNavigate,
+}) {
   const pathname = usePathname();
   const {
     documents,
@@ -25,6 +29,7 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
     trash,
     storageMetrics,
     billing,
+    hasPermission,
   } = useVault();
 
   const navItems = [
@@ -39,19 +44,23 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
       href: "/dashboard/files",
       icon: FilesIcon,
       badge: documents.length.toString(),
+      permission: "VIEW_DOCUMENTS",
     },
     {
       name: "Folders",
       href: "/dashboard/folders",
       icon: FolderIcon,
       badge: folders.length.toString(),
+      permission: "VIEW_DOCUMENTS",
     },
     {
       name: "Starred",
       href: "/dashboard/starred",
       icon: StarIcon,
-      badge: starredDocuments.length > 0 ? starredDocuments.length.toString() : null,
+      badge:
+        starredDocuments.length > 0 ? starredDocuments.length.toString() : null,
       badgeColor: "bg-amber-100 text-amber-700",
+      permission: "VIEW_DOCUMENTS",
     },
     {
       name: "Trash",
@@ -59,13 +68,18 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
       icon: TrashIcon,
       badge: trash.length > 0 ? trash.length.toString() : null,
       badgeColor: "bg-rose-100 text-rose-700",
+      permission: "VIEW_TRASH",
     },
     {
       name: "Subscription",
       href: "/dashboard/subscription",
       icon: SparklesIcon,
+      permission: "VIEW_SUBSCRIPTION",
     },
   ];
+  const visibleNavItems = navItems.filter(
+    (item) => !item.permission || hasPermission(item.permission),
+  );
 
   const isActive = (item) => {
     if (item.exact) {
@@ -112,7 +126,7 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
 
         {/* Navigation List */}
         <nav className="space-y-1.5">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = isActive(item);
             const Icon = item.icon;
 
@@ -130,7 +144,9 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
                 <div className="flex items-center gap-3">
                   <Icon
                     className={`w-5 h-5 transition-colors ${
-                      active ? "text-white" : "text-slate-400 group-hover:text-slate-600"
+                      active
+                        ? "text-white"
+                        : "text-slate-400 group-hover:text-slate-600"
                     }`}
                   />
                   <span>{item.name}</span>
@@ -161,9 +177,7 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
             <p className="text-xs font-semibold text-slate-800">
               AES-256 Vault Guard
             </p>
-            <p className="text-[11px] text-slate-400">
-              End-to-end encrypted
-            </p>
+            <p className="text-[11px] text-slate-400">End-to-end encrypted</p>
           </div>
         </div>
       </div>
@@ -177,7 +191,9 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
               <HardDriveIcon className="w-4 h-4 text-blue-600" />
               Storage Used
             </span>
-            <span className="text-blue-700 font-bold">{storageMetrics.percentage}%</span>
+            <span className="text-blue-700 font-bold">
+              {storageMetrics.percentage}%
+            </span>
           </div>
 
           {/* Progress Bar */}
@@ -189,17 +205,22 @@ export default function Sidebar({ className = "", userEmail = "", onNavigate }) 
           </div>
 
           <p className="text-[11px] text-slate-500 mb-3">
-            <span className="font-semibold text-slate-700">{storageMetrics.formattedUsed}</span> of {storageMetrics.quotaLabel} used
+            <span className="font-semibold text-slate-700">
+              {storageMetrics.formattedUsed}
+            </span>{" "}
+            of {storageMetrics.quotaLabel} used
           </p>
 
-          <Link
-            href="/dashboard/subscription"
-            onClick={onNavigate}
-            className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-blue-700 bg-white hover:bg-blue-600 hover:text-white border border-blue-200 hover:border-transparent transition-all duration-150 flex items-center justify-center gap-1.5 shadow-xs"
-          >
-            <SparklesIcon className="w-3.5 h-3.5" />
-            {billing.plan === "free" ? "View plans" : "Manage subscription"}
-          </Link>
+          {hasPermission("VIEW_SUBSCRIPTION") && (
+            <Link
+              href="/dashboard/subscription"
+              onClick={onNavigate}
+              className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-blue-700 bg-white hover:bg-blue-600 hover:text-white border border-blue-200 hover:border-transparent transition-all duration-150 flex items-center justify-center gap-1.5 shadow-xs"
+            >
+              <SparklesIcon className="w-3.5 h-3.5" />
+              {billing.plan === "free" ? "View plans" : "Manage subscription"}
+            </Link>
+          )}
         </div>
 
         {/* User Card */}

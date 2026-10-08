@@ -15,6 +15,19 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum Permission {
+  VIEW_DOCUMENTS
+  UPLOAD_DOCUMENT
+  DOWNLOAD_DOCUMENT
+  DELETE_DOCUMENT
+  RESTORE_DOCUMENT
+  EMPTY_TRASH
+  SHARE_DOCUMENT
+  RENAME_DOCUMENT
+  VIEW_TRASH
+  VIEW_SUBSCRIPTION
+}
+
 model User {
   id               String         @id @default(cuid())
   email            String         @unique @db.VarChar(320)
@@ -24,12 +37,26 @@ model User {
   stripeCustomerId String?        @unique @db.VarChar(255)
   createdAt        DateTime       @default(now())
   sessions         Session[]
+  userPermissions  UserPermission[]
   documents        Document[]
   folders          Folder[]
   trashItems       TrashItem[]
   otpChallenges    OtpChallenge[]
   subscriptions    Subscription[]
   payments         Payment[]
+}
+
+model UserPermission {
+  id         String     @id @default(cuid())
+  userId     String
+  permission Permission
+  enabled    Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permission])
+  @@index([permission, enabled])
 }
 
 model SubscriptionPlan {

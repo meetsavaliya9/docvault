@@ -75,6 +75,7 @@ export async function GET(request) {
         name: account.name,
         email: account.email,
         isAdmin: isAdminEmail(account.email),
+        role: isAdminEmail(account.email) ? "ADMIN" : "USER",
         isBlocked: account.isBlocked,
         createdAt: account.createdAt,
         documentCount: account._count.documents,

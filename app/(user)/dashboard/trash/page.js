@@ -22,6 +22,7 @@ export default function TrashPage() {
     restoreFromTrash,
     deletePermanently,
     emptyTrash,
+    hasPermission,
   } = useVault();
 
   useEffect(() => {
@@ -62,6 +63,8 @@ export default function TrashPage() {
     setPendingRestore(null);
   };
 
+  if (!hasPermission("VIEW_TRASH")) return null;
+
   return (
     <main className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Header */}
@@ -79,7 +82,7 @@ export default function TrashPage() {
           </p>
         </div>
 
-        {trash.length > 0 && (
+        {trash.length > 0 && hasPermission("EMPTY_TRASH") && (
           <button
             onClick={() => setIsEmptyTrashDialogOpen(true)}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-rose-500/20 transition-all hover:bg-rose-700 active:scale-95 sm:w-auto sm:self-auto sm:text-sm cursor-pointer"
@@ -130,21 +133,21 @@ export default function TrashPage() {
               </div>
             </div>
             <div className="mt-6 flex flex-col-reverse gap-2 min-[380px]:flex-row min-[380px]:justify-end">
-              <button
+              {hasPermission("RESTORE_DOCUMENT") && <button
                 type="button"
                 autoFocus
                 onClick={() => setIsEmptyTrashDialogOpen(false)}
                 className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 min-[380px]:w-auto cursor-pointer"
               >
                 Cancel
-              </button>
-              <button
+              </button>}
+              {hasPermission("DELETE_DOCUMENT") && <button
                 type="button"
                 onClick={handleEmptyTrash}
                 className="w-full rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-700 min-[380px]:w-auto cursor-pointer"
               >
                 Empty Trash
-              </button>
+              </button>}
             </div>
           </section>
         </div>
@@ -319,20 +322,20 @@ export default function TrashPage() {
 
                   <td className="px-5 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button
+                      {hasPermission("RESTORE_DOCUMENT") && <button
                         onClick={() => setPendingRestore(file)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-semibold transition-all cursor-pointer text-xs"
                       >
                         <RefreshCwIcon className="w-3.5 h-3.5" />
                         Restore
-                      </button>
+                      </button>}
 
-                      <button
+                      {hasPermission("DELETE_DOCUMENT") && <button
                         onClick={() => handlePermanentDelete(file)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white font-semibold transition-all cursor-pointer text-xs"
                       >
                         Delete Forever
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>

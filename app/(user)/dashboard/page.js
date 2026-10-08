@@ -29,7 +29,9 @@ export default function DashboardPage() {
     billing,
     toggleStar,
     downloadDocument,
+    hasPermission,
   } = useVault();
+  const canViewDocuments = hasPermission("VIEW_DOCUMENTS");
 
   const [activeTab, setActiveTab] = useState("all");
   const [previewFile, setPreviewFile] = useState(null);
@@ -104,18 +106,20 @@ export default function DashboardPage() {
               Welcome back, {userName} 👋
             </h1>
             <p className="mt-1.5 text-blue-100 text-sm max-w-xl">
-              All {documents.length} cloud documents are synchronized and secured with AES-256 encryption. You have used {storageMetrics.percentage}% of your {storageMetrics.planName || "Free"} storage quota.
+              {canViewDocuments
+                ? `All ${documents.length} cloud documents are synchronized and secured with AES-256 encryption. You have used ${storageMetrics.percentage}% of your ${storageMetrics.planName || "Free"} storage quota.`
+                : "Your cloud workspace is synchronized and secured with AES-256 encryption."}
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <Link
+            {hasPermission("UPLOAD_DOCUMENT") && <Link
               href="/dashboard/files"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-blue-600 font-semibold text-xs sm:text-sm hover:bg-blue-50 transition-all shadow-md active:scale-95 cursor-pointer"
             >
               <PlusIcon className="w-4 h-4 text-blue-600" />
               Upload Document
-            </Link>
+            </Link>}
             <Link
               href="/dashboard/folders"
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-medium text-xs sm:text-sm border border-white/25 backdrop-blur-md transition-all active:scale-95 cursor-pointer"
@@ -127,7 +131,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <section className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center">
+      {hasPermission("VIEW_SUBSCRIPTION") && <section className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-blue-600">Current plan</p>
           <p className="mt-1 text-lg font-extrabold text-slate-900">
@@ -156,10 +160,10 @@ export default function DashboardPage() {
         >
           {billing.plan === "free" ? "Upgrade" : "Manage Plan"}
         </Link>
-      </section>
+      </section>}
 
       {/* KPI Analytics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {canViewDocuments && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Total Documents */}
         <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 group">
           <div className="flex items-center justify-between">
@@ -253,10 +257,10 @@ export default function DashboardPage() {
             AES-256 bit data protection
           </p>
         </div>
-      </div>
+      </div>}
 
       {/* Storage Breakdown Multi-Bar */}
-      <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+      {canViewDocuments && <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
             <h3 className="text-base font-bold text-slate-900">
@@ -314,10 +318,10 @@ export default function DashboardPage() {
             <span className="text-slate-600">Sheets & Other: <b className="text-slate-800">{typeDistribution.otherMB} MB</b></span>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Quick Folders Section */}
-      <div>
+      {canViewDocuments && <div>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900 tracking-tight">
@@ -362,10 +366,10 @@ export default function DashboardPage() {
             </Link>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Recent Documents Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {canViewDocuments && <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900 tracking-tight">
@@ -490,13 +494,13 @@ export default function DashboardPage() {
                         <EyeIcon className="w-4 h-4" />
                       </button>
 
-                      <button
+                      {hasPermission("DOWNLOAD_DOCUMENT") && <button
                         onClick={() => downloadDocument(doc)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                         title="Download Document"
                       >
                         <DownloadIcon className="w-4 h-4" />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>
@@ -504,10 +508,10 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
       {/* Quick Preview Modal */}
-      {previewFile && (
+      {canViewDocuments && previewFile && (
         <div
           onClick={() => setPreviewFile(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-150"
@@ -563,7 +567,7 @@ export default function DashboardPage() {
 
             {/* Modal Actions */}
             <div className="flex items-center gap-3">
-              <button
+              {hasPermission("DOWNLOAD_DOCUMENT") && <button
                 onClick={() => {
                   downloadDocument(previewFile);
                   setPreviewFile(null);
@@ -572,7 +576,7 @@ export default function DashboardPage() {
               >
                 <DownloadIcon className="w-4 h-4" />
                 Download Decrypted Copy
-              </button>
+              </button>}
               <button
                 onClick={() => setPreviewFile(null)}
                 className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"

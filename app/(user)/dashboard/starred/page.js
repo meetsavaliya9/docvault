@@ -18,6 +18,7 @@ export default function StarredPage() {
     starredDocuments,
     toggleStar,
     downloadDocument,
+    hasPermission,
   } = useVault();
 
   const [search, setSearch] = useState("");
@@ -27,6 +28,8 @@ export default function StarredPage() {
     f.name.toLowerCase().includes(search.toLowerCase()) ||
     f.folder.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (!hasPermission("VIEW_DOCUMENTS")) return null;
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
@@ -136,13 +139,13 @@ export default function StarredPage() {
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>
-                      <button
+                      {hasPermission("DOWNLOAD_DOCUMENT") && <button
                         onClick={() => downloadDocument(file)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                         title="Download"
                       >
                         <DownloadIcon className="w-4 h-4" />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>
@@ -196,12 +199,12 @@ export default function StarredPage() {
                   </p>
                 </div>
               </div>
-              <button
+              {hasPermission("DOWNLOAD_DOCUMENT") && <button
                 onClick={() => setPreviewFile(null)}
                 className="text-slate-400 hover:text-slate-700 text-xl leading-none cursor-pointer"
               >
                 &times;
-              </button>
+              </button>}
             </div>
 
             <div className="my-5 p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center text-center">
@@ -224,7 +227,7 @@ export default function StarredPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button
+              {hasPermission("DOWNLOAD_DOCUMENT") && <button
                 onClick={() => {
                   downloadDocument(previewFile);
                   setPreviewFile(null);
@@ -233,7 +236,7 @@ export default function StarredPage() {
               >
                 <DownloadIcon className="w-4 h-4" />
                 Download Copy
-              </button>
+              </button>}
               <button
                 onClick={() => setPreviewFile(null)}
                 className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"

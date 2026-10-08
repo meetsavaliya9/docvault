@@ -9,6 +9,7 @@ import {
 import { promisify } from "node:util";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_USER_PERMISSIONS } from "@/lib/permissionConstants";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = "docvault_session";
@@ -84,6 +85,9 @@ export async function createAccount(email, passwordOrHash, name = null, isPreHas
         email: email.trim().toLowerCase(),
         name: name ? name.trim() : null,
         passwordHash,
+        userPermissions: {
+          create: DEFAULT_USER_PERMISSIONS.map((permission) => ({ permission, enabled: true })),
+        },
         subscriptions: {
           create: {
             provider: "internal",

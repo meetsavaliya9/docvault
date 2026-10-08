@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
 import { uploadPrivateAsset } from "@/lib/cloudinary";
+import { hasPermission } from "@/lib/permissions";
 
 export async function POST(request) {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "You are not signed in." }, { status: 401 });
+  }
+  if (!(await hasPermission(user, "UPLOAD_DOCUMENT"))) {
+    return NextResponse.json({ error: "You do not have permission to upload documents." }, { status: 403 });
   }
 
   try {
