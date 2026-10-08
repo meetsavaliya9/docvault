@@ -403,7 +403,14 @@ export default function AdminDataTable({
             result.error || `Could not load ${config.title.toLowerCase()}.`,
           );
         setError("");
-        setItems(result[config.collection] || []);
+        const collectionItems = result[config.collection] || [];
+        setItems(
+          resource === "users"
+            ? collectionItems.filter(
+                (user) => !user.isAdmin && user.role !== "ADMIN",
+              )
+            : collectionItems,
+        );
         setTotal(result.total || 0);
         setSelectedUser(result.selectedUser || null);
       })
@@ -886,13 +893,13 @@ export default function AdminDataTable({
                             <button
                               type="button"
                               onClick={() => setSelected(item)}
-                              className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                              className="px-1 py-1.5 text-xs font-semibold text-blue-700 transition-colors duration-200 hover:text-blue-900 hover:underline"
                             >
                               View
                             </button>
                             <Link
                               href={`/admin/documents?userId=${encodeURIComponent(item.id)}`}
-                              className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                              className="px-1 py-1.5 text-xs font-semibold text-green-700 transition-colors duration-200 hover:text-green-900 hover:underline"
                             >
                               View Files
                             </Link>
@@ -900,7 +907,7 @@ export default function AdminDataTable({
                               <button
                                 type="button"
                                 onClick={() => openPermissionEditor(item)}
-                                className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                                className="px-1 py-1.5 text-xs font-semibold text-purple-700 transition-colors duration-200 hover:text-purple-900 hover:underline"
                               >
                                 Permissions
                               </button>
