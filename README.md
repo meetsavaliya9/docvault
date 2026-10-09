@@ -64,10 +64,11 @@ SELECT id, name, type, size, createdAt FROM Document;
 ## Administrator account setup
 
 Admin accounts sign in through the existing login flow; they do not need to use
-public signup. An account must first exist in the database and its email must be
-included in the comma-separated `ADMIN_EMAILS` allowlist. To create an initial
-admin account, set `ADMIN_EMAIL` to an allowlisted email and `ADMIN_PASSWORD` to
-a unique password of at least 12 characters in `.env.local`, then run:
+public signup. An account must first exist in the database and either have the
+`ADMIN` role or have its email included in the comma-separated `ADMIN_EMAILS`
+allowlist. To bootstrap an initial allowlisted admin account, set `ADMIN_EMAIL`
+to an allowlisted email and `ADMIN_PASSWORD` to a unique password of at least
+12 characters in `.env.local`, then run:
 
 ```bash
 npm run admin:bootstrap
@@ -80,11 +81,85 @@ production database using Railway's public connection URL. Keep all credentials
 out of source control, and remove the temporary `ADMIN_PASSWORD` value after
 bootstrapping.
 
+## Roles and manager access
+
+DocVault stores `ADMIN`, `MANAGER`, or `USER` on each account. All roles use
+the shared `/login` page; Admins land at `/admin`, the configured Manager lands
+at `/manager`, and Users land at `/dashboard`. Set `MANAGER_EMAIL` in the
+environment and run `npm run manager:bootstrap` against the intended database
+to prepare the single configured Manager. If the account does not exist, also
+set `MANAGER_PASSWORD` to a unique password of at least 12 characters; it is
+used only when creating the account. If the matching account already exists,
+its password and existing Manager permissions are preserved.
+The command is safe to rerun and refuses to modify an Admin account.
+
+Role labels on Admin Panel → Users are read-only and that page lists regular
+`USER` accounts. The dedicated `/admin/managers` page shows the configured
+account, its activation status, and its permissions. An Admin controls the
+account status and configures its permissions there. Manager permissions are
+disabled by default for a newly created or converted account. The Admin
+permission editor exposes only the Manager-safe dashboard and operational
+read permissions: `VIEW_DASHBOARD`, `VIEW_DASHBOARD_STATS`,
+`VIEW_RECENT_DOCUMENTS`, `VIEW_STORAGE_USAGE`, `VIEW_USERS`, and
+`VIEW_USER_FILES`, `VIEW_PAYMENTS`, `VIEW_SUBSCRIPTIONS`, and `VIEW_REPORTS`.
+Dashboard summary permissions can be adjusted independently after dashboard
+access is granted. User-directory, file, billing, and reports access are
+separately permission-controlled.
+
+The configured, database-role-verified Manager can view all regular `USER`
+accounts, including blocked accounts, when `VIEW_USERS` is enabled. The user
+directory reports account status and registration date. Subscription details
+are shown only when `VIEW_SUBSCRIPTIONS` is also enabled.
+`VIEW_USER_FILES` controls access to stored files belonging to regular `USER`
+accounts, including preview and download through a Manager-only media endpoint.
+Admins, Managers, and deleted documents are excluded. The legacy Admin
+assignment records are retained, but do not limit or expand this Manager scope.
+Manager pages and `/api/manager/*` endpoints validate the authenticated Manager
+role and permissions on the server.
+
+| Page or feature | Admin | Manager | User | Manager authorization |
+| --- | --- | --- | --- | --- |
+| Admin dashboard, user administration, manager assignments and permissions | Yes | No | No | Admin-only |
+| Manager dashboard and summary reports | Yes | Optional | No | `VIEW_DASHBOARD`; user, file, payment, and subscription sections require their matching data permission; combined summary/revenue/activity also require `VIEW_DASHBOARD_STATS` and `VIEW_REPORTS` |
+| User directory and account details | Yes | Optional | No | `VIEW_USERS`; normal `USER` accounts; plan details additionally require `VIEW_SUBSCRIPTIONS` |
+| Normal users' file list, preview and download | Yes | Optional | No | `VIEW_USER_FILES`; stored documents only; no mutations |
+| Payment and subscription history | Yes | Optional | Own records only | `VIEW_PAYMENTS` and `VIEW_SUBSCRIPTIONS`; Manager access is read-only |
+| Manager's own profile | Yes | Yes | No | Authenticated Manager session |
+| User dashboard, documents, folders, trash, subscription and profile | No (separate workspace) | No | Yes | User session, existing permissions and ownership checks |
+| Plans, payments, subscription changes and billing operations | Yes | No | Own subscription only | Admin-only management; Users may access only their own subscription/payment records |
+| Admin settings, role/permission administration, secrets and system configuration | Yes | No | No | Admin-only |
+
+Manager access is **off by default** for a newly created or converted account.
+Manager APIs are read-only `GET` endpoints for normal User records, stored
+file metadata and authorized media, and recorded payment/subscription data.
+Admin APIs, billing mutations, User-owned document APIs, and system
+configuration are not granted to Managers.
+The Manager dashboard reads `/api/manager/dashboard`, applies UTC date filters
+to its real database aggregates, and refreshes when the user returns to the
+page or selects Refresh. Activity entries are derived from authorized recent
+user, file, payment, and subscription records; the schema has no separate
+audit-event log.
+The repository audit identified 26 page routes (with 13 layouts), 36 API route
+files, and 48 exported HTTP-method handlers. The shared permission catalog
+continues to serve Admin-managed User permissions; Manager grants use a
+separate allowlist enforced by the server so legacy or manually stored
+permissions outside the Manager-safe read capabilities have no effect.
+
+Configure `MANAGER_EMAIL` (and `MANAGER_PASSWORD` for first-time account
+creation) in local `.env.local` and in the production environment, then run
+`npm run manager:bootstrap` with the target database's `DATABASE_URL` in a
+trusted setup environment. Do not expose `MANAGER_PASSWORD` to the browser or
+commit it to source control.
+
+Admin and User panels retain their existing functionality. Cross-panel
+requests do not render another role's panel, and Admin APIs remain Admin-only.
+
 ## Email OTP authentication
 
-Sign-up and sign-in require a six-digit email OTP after the password step.
-The server-side mail utility sends signup, resend, and login OTP messages using
-Nodemailer. In local development, Next.js reads the SMTP settings from
+Public sign-up and `USER` sign-in require a six-digit email OTP. `ADMIN` and
+the configured database-role-verified `MANAGER` sign in directly after their
+password is verified. The server-side mail utility sends signup, resend, and
+User login OTP messages using Nodemailer. In local development, Next.js reads the SMTP settings from
 `.env.local`; in production, add the same variables in Vercel under
 **Project Settings → Environment Variables**, enabled for **Production**:
 
@@ -117,14 +192,15 @@ npx prisma generate
 ```
 
 Codes expire after 10 minutes and have at most five verification attempts. OTP
-delivery requires valid SMTP settings in every environment; development mode
-does not return verification codes to the browser or log them to the server.
-To test locally, run `npm run dev` and use the signup form with an email inbox
-you can access; confirm the OTP arrives, then enter it to complete verification.
-Also test resend and login OTP from their existing UI flows. On Vercel, save the
-Production variables and redeploy, then repeat signup or login on the live
-website with an inbox you can access. Vercel environment variable changes only
-apply to new deployments.
+delivery is required for sign-up and User login; Admin and Manager login do not
+generate or send OTPs. Development mode does not return verification codes to
+the browser or log them to the server. To test locally, run `npm run dev` and
+use the signup form or sign in with a User account and an inbox you can access;
+confirm the OTP arrives, then enter it to complete verification. Also test
+resend from the OTP screen. Admin and Manager should go directly to their
+respective panels after password verification. On Vercel, save the Production
+variables and redeploy, then repeat the checks on the live website. Vercel
+environment variable changes only apply to new deployments.
 
 ## Private Cloudinary media storage
 

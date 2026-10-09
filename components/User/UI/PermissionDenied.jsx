@@ -23,6 +23,14 @@ const permissionMessages = {
     "Subscription Access Restricted",
     "You don't have permission to access subscription details. Please contact your administrator.",
   ],
+  VIEW_USERS: [
+    "Users Access Restricted",
+    "You don't have permission to access this page.",
+  ],
+  VIEW_USER_FILES: [
+    "User Files Restricted",
+    "You don't have permission to view user files.",
+  ],
   VIEW_DASHBOARD_STATS: [
     "Dashboard Stats Restricted",
     "You don't have permission to view dashboard statistics.",

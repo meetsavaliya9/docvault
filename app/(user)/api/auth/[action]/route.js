@@ -9,6 +9,7 @@ import {
 } from "@/app/lib/auth/session";
 import {
   sendLoginOtp,
+  resendLoginOtp,
   sendSignupOtp,
   resendSignupOtp,
   verifyLoginOtp,
@@ -17,7 +18,6 @@ import {
 import {
   createAdminSession,
   destroyAdminSession,
-  isAdminEmail,
 } from "@/lib/auth/admin";
 import { getUserPermissions, getUserRole } from "@/lib/permissions";
 import {
@@ -127,7 +127,29 @@ export async function POST(request, { params }) {
 
     // 2. Resend OTP for pending Signup
     if (action === "resend-otp") {
-      const result = await resendSignupOtp(body?.email);
+      const email = typeof body?.email === "string"
+        ? body.email.trim().toLowerCase()
+        : "";
+      const account = email
+        ? await prisma.user.findUnique({
+            where: { email },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              isBlocked: true,
+            },
+          })
+        : null;
+
+      if (account && getUserRole(account) !== "USER") {
+        return errorResponse("OTP resend is only available for user accounts.", 403);
+      }
+
+      const result = account
+        ? await resendLoginOtp(account)
+        : await resendSignupOtp(body?.email);
       if (result.error) {
         return errorResponse(result.error, result.status || 400);
       }
@@ -179,6 +201,14 @@ export async function POST(request, { params }) {
       }
 
       // If no pending signup, check if this is an existing user sign-in 2FA
+      const account = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, email: true, name: true, role: true },
+      });
+      if (account && getUserRole(account) !== "USER") {
+        return errorResponse("OTP verification is only available for user accounts.", 403);
+      }
+
       const result = await verifyLoginOtp(email, code);
       if (result.error) {
         return errorResponse(result.error, result.status || 400);
@@ -207,12 +237,25 @@ export async function POST(request, { params }) {
         return errorResponse("Email or password is incorrect.", 401);
       }
 
-      if (isAdminEmail(email)) {
+      const role = getUserRole(user);
+      if (role === "ADMIN") {
         await destroySession();
+        await destroyAdminSession();
+        await createSession(user);
         await createAdminSession(user);
         return NextResponse.json({
           success: true,
           redirectTo: "/admin",
+        });
+      }
+
+      if (role === "MANAGER") {
+        await destroySession();
+        await destroyAdminSession();
+        await createSession(user);
+        return NextResponse.json({
+          success: true,
+          redirectTo: "/manager",
         });
       }
 

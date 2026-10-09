@@ -5,7 +5,7 @@ import { VaultProvider } from "@/app/(user)/dashboard/lib/vaultContext";
 import CommandPalette from "@/components/User/CommandPalette/CommandPalette";
 import ToastMessage from "@/components/User/UI/ToastMessage";
 import { getAuthenticatedUser } from "@/app/lib/auth/session";
-import { getUserPermissions } from "@/lib/permissions";
+import { getUserPermissions, getUserRole } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,9 @@ export default async function DashboardLayout({ children }) {
   if (!user) {
     redirect("/login");
   }
+  const role = getUserRole(user);
+  if (role === "MANAGER") redirect("/manager");
+  if (role === "ADMIN") redirect("/admin");
   const userPermissions = await getUserPermissions(user);
   return (
     <VaultProvider key={user.id} userId={user.id} userEmail={user.email || ""} userPermissions={userPermissions}>

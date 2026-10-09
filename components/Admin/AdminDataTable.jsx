@@ -192,6 +192,21 @@ function columnsFor(resource) {
         ),
       },
       {
+        label: "Role",
+        key: "role",
+        render: (item) => (
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+            item.role === "MANAGER"
+              ? "bg-indigo-50 text-indigo-700"
+              : item.role === "ADMIN"
+                ? "bg-purple-50 text-purple-700"
+                : "bg-slate-100 text-slate-700"
+          }`}>
+            {item.role === "MANAGER" ? "Manager" : item.role === "ADMIN" ? "Admin" : "User"}
+          </span>
+        ),
+      },
+      {
         label: "Status",
         key: "isBlocked",
         render: (item) => (
@@ -408,13 +423,7 @@ export default function AdminDataTable({
           );
         setError("");
         const collectionItems = result[config.collection] || [];
-        setItems(
-          resource === "users"
-            ? collectionItems.filter(
-                (user) => !user.isAdmin && user.role !== "ADMIN",
-              )
-            : collectionItems,
-        );
+        setItems(collectionItems);
         setTotal(result.total || 0);
         setSelectedUser(result.selectedUser || null);
       })
@@ -913,7 +922,12 @@ export default function AdminDataTable({
                             >
                               View Files
                             </Link>
-                            {!item.isAdmin && (
+                            {item.isAdmin && (
+                              <span className="px-2 text-[11px] font-medium text-slate-400">
+                                Protected
+                              </span>
+                            )}
+                            {!item.isAdmin && item.role !== "ADMIN" && (
                               <button
                                 type="button"
                                 onClick={() => openPermissionEditor(item)}
@@ -922,7 +936,7 @@ export default function AdminDataTable({
                                 Permissions
                               </button>
                             )}
-                            {!item.isAdmin && (
+                            {!item.isAdmin && item.role !== "ADMIN" && (
                               <button
                                 type="button"
                                 onClick={() => handleAction(item, "block")}
@@ -931,7 +945,7 @@ export default function AdminDataTable({
                                 {item.isBlocked ? "Unblock" : "Block"}
                               </button>
                             )}
-                            {!item.isAdmin && (
+                            {!item.isAdmin && item.role !== "ADMIN" && (
                               <button
                                 type="button"
                                 onClick={() => handleAction(item, "delete")}
@@ -939,11 +953,6 @@ export default function AdminDataTable({
                               >
                                 Delete
                               </button>
-                            )}
-                            {item.isAdmin && (
-                              <span className="px-2 text-[11px] font-medium text-slate-400">
-                                Admin
-                              </span>
                             )}
                           </>
                         )}

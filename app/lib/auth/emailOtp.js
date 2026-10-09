@@ -272,6 +272,45 @@ export async function resendSignupOtp(email) {
   };
 }
 
+export async function resendLoginOtp(user) {
+  if (!user?.id || !user.email || user.role !== "USER") {
+    return { error: "OTP resend is only available for user accounts.", status: 403 };
+  }
+  if (user.isBlocked) {
+    return { error: "This account is blocked.", status: 403 };
+  }
+
+  const latestChallenge = await prisma.otpChallenge.findFirst({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (!latestChallenge) {
+    return {
+      error: "No sign-in verification is pending. Please sign in again.",
+      status: 404,
+    };
+  }
+
+  const elapsed = Date.now() - latestChallenge.createdAt.getTime();
+  if (elapsed < OTP_COOLDOWN_MS) {
+    const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - elapsed) / 1000);
+    return {
+      error: `Please wait ${remainingSeconds} seconds before requesting a new OTP.`,
+      status: 429,
+      retryAfter: remainingSeconds,
+    };
+  }
+
+  const result = await sendLoginOtp(user);
+  return {
+    success: true,
+    message: "A new sign-in OTP has been sent to your email.",
+    cooldownSeconds: OTP_COOLDOWN_MS / 1000,
+    expiresInSeconds: result.expiresInSeconds,
+  };
+}
+
 /**
  * Verifies the OTP entered by the user.
  * ONLY upon successful verification, creates the actual User record in MySQL via Prisma transaction.
@@ -376,7 +415,7 @@ export async function verifySignupOtp(email, code) {
                 },
               },
             },
-            select: { id: true, email: true, name: true },
+            select: { id: true, email: true, name: true, role: true },
           }),
           prisma.emailVerification.delete({
             where: { id: pending.id },
@@ -398,6 +437,12 @@ export async function verifySignupOtp(email, code) {
  * Preserved for existing user sign-in 2FA (if used).
  */
 export async function sendLoginOtp(user) {
+  if (!user?.id || user.role !== "USER") {
+    const error = new Error("Login OTP is only available for user accounts.");
+    error.code = "OTP_USER_ONLY";
+    throw error;
+  }
+
   const smtpCheck = validateSmtpConfig();
   if (!smtpCheck.ok) {
     const error = new Error(smtpCheck.error);
@@ -443,10 +488,13 @@ export async function verifyLoginOtp(email, code) {
   const normalizedEmail = email.trim().toLowerCase();
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
-    select: { id: true, email: true, name: true, isBlocked: true },
+    select: { id: true, email: true, name: true, role: true, isBlocked: true },
   });
   if (!user || user.isBlocked) {
     return { error: "The verification code is invalid or expired.", status: 400 };
+  }
+  if (user.role !== "USER") {
+    return { error: "OTP verification is only available for user accounts.", status: 403 };
   }
 
   const challenge = await prisma.otpChallenge.findFirst({

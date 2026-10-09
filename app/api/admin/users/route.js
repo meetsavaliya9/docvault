@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { isAdminEmail, requireAdmin } from "@/lib/auth/admin";
+import { getAdminEmails, isAdminEmail, requireAdmin } from "@/lib/auth/admin";
+import { getConfiguredManagerEmail } from "@/lib/managerConfig";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -17,7 +18,11 @@ export async function GET(request) {
   );
   const search = url.searchParams.get("search")?.trim();
   const status = url.searchParams.get("status");
+  const adminEmails = getAdminEmails();
+  const managerEmail = getConfiguredManagerEmail();
   const where = {
+    role: "USER",
+    ...(adminEmails.length ? { email: { notIn: adminEmails } } : {}),
     ...(status === "blocked" ? { isBlocked: true } : status === "active" ? { isBlocked: false } : {}),
     ...(search
       ? {
@@ -31,15 +36,21 @@ export async function GET(request) {
   };
 
   try {
-    const [accounts, total] = await Promise.all([
+    const [accounts, total, managers] = await Promise.all([
       prisma.user.findMany({
         where,
         select: {
           id: true,
           email: true,
           name: true,
+          role: true,
           isBlocked: true,
           createdAt: true,
+          managerAssignment: {
+            select: {
+              manager: { select: { id: true, name: true, email: true } },
+            },
+          },
           _count: { select: { documents: true } },
           subscriptions: {
             where: {
@@ -66,16 +77,29 @@ export async function GET(request) {
         take: pageSize,
       }),
       prisma.user.count({ where }),
+      prisma.user.findMany({
+        where: {
+          role: "MANAGER",
+          ...(managerEmail ? { email: managerEmail } : { id: "__manager_not_configured__" }),
+          ...(managerEmail && isAdminEmail(managerEmail)
+            ? { id: "__manager_not_configured__" }
+            : {}),
+        },
+        select: { id: true, name: true, email: true, isBlocked: true },
+        orderBy: { name: "asc" },
+      }),
     ]);
 
     const users = accounts.map((account) => {
       const subscription = account.subscriptions[0] || null;
+      const isAdmin = account.role === "ADMIN" || isAdminEmail(account.email);
       return {
         id: account.id,
         name: account.name,
         email: account.email,
-        isAdmin: isAdminEmail(account.email),
-        role: isAdminEmail(account.email) ? "ADMIN" : "USER",
+        isAdmin,
+        role: isAdmin ? "ADMIN" : account.role,
+        manager: account.managerAssignment?.manager || null,
         isBlocked: account.isBlocked,
         createdAt: account.createdAt,
         documentCount: account._count.documents,
@@ -89,11 +113,14 @@ export async function GET(request) {
       };
     });
 
-    return NextResponse.json({ users, total, page, pageSize }, {
+    return NextResponse.json({ users, total, page, pageSize, managers }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    console.error("Admin user list fetch error:", error);
+    console.error("Admin user list fetch error:", {
+      name: error?.name,
+      code: error?.code,
+    });
     return NextResponse.json({ error: "Could not load users." }, { status: 500 });
   }
 }

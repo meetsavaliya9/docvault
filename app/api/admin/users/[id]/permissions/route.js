@@ -4,11 +4,14 @@ import { isAdminEmail, requireAdmin } from "@/lib/auth/admin";
 import {
   applyPermissionDependencies,
   DEFAULT_USER_PERMISSIONS,
+  MANAGER_PERMISSIONS,
+  MANAGER_PERMISSION_GROUPS,
   PERMISSION_DEPENDENCIES,
   PERMISSIONS,
   createPermissionMap,
 } from "@/lib/permissionConstants";
 import { prisma } from "@/lib/prisma";
+import { isConfiguredManager } from "@/lib/managerConfig";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +52,7 @@ async function logRuntimeDatasourceTarget() {
 async function getTargetUser(targetUserId) {
   return prisma.user.findUnique({
     where: { id: targetUserId },
-    select: { id: true, email: true },
+    select: { id: true, email: true, role: true },
   });
 }
 
@@ -66,7 +69,11 @@ export async function GET(_request, { params }) {
         { status: 404 },
       );
     }
-    if (isAdminEmail(user.email)) {
+    if (
+      isAdminEmail(user.email) ||
+      user.role === "ADMIN" ||
+      (user.role !== "USER" && !isConfiguredManager(user))
+    ) {
       return NextResponse.json(
         { success: false, error: "Administrator permissions cannot be changed." },
         { status: 400 },
@@ -78,18 +85,28 @@ export async function GET(_request, { params }) {
     }
 
     const records = await prisma.userPermission.findMany({
-      where: { userId: user.id },
+      where: {
+        userId: user.id,
+        ...(isConfiguredManager(user)
+          ? { permission: { in: MANAGER_PERMISSIONS } }
+          : {}),
+      },
       select: { permission: true, enabled: true },
     });
-    const permissions = createPermissionMap(DEFAULT_USER_PERMISSIONS);
+    const permissions = createPermissionMap(
+      user.role === "MANAGER" ? [] : DEFAULT_USER_PERMISSIONS,
+    );
     for (const record of records) {
       permissions[record.permission] = record.enabled;
     }
     return NextResponse.json({
       success: true,
       userId: user.id,
-      role: "USER",
+      role: user.role,
       permissions: applyPermissionDependencies(permissions),
+      ...(isConfiguredManager(user)
+        ? { permissionGroups: MANAGER_PERMISSION_GROUPS }
+        : {}),
     }, {
       headers: { "Cache-Control": "no-store" },
     });
@@ -115,7 +132,11 @@ export async function PUT(request, { params }) {
         { status: 404 },
       );
     }
-    if (isAdminEmail(user.email)) {
+    if (
+      isAdminEmail(user.email) ||
+      user.role === "ADMIN" ||
+      (user.role !== "USER" && !isConfiguredManager(user))
+    ) {
       return NextResponse.json(
         { success: false, error: "Administrator permissions cannot be changed." },
         { status: 400 },
@@ -134,6 +155,7 @@ export async function PUT(request, { params }) {
 
     const values = body?.permissions;
     const parentChanges = body?.parentChanges ?? {};
+    const isManager = isConfiguredManager(user);
     if (
       !values ||
       typeof values !== "object" ||
@@ -143,6 +165,14 @@ export async function PUT(request, { params }) {
       !parentChanges ||
       typeof parentChanges !== "object" ||
       Array.isArray(parentChanges) ||
+      (isManager &&
+        (Object.entries(values).some(
+          ([permission, enabled]) =>
+            enabled === true && !MANAGER_PERMISSIONS.includes(permission),
+        ) ||
+          Object.keys(parentChanges).some(
+            (permission) => !MANAGER_PERMISSIONS.includes(permission),
+          ))) ||
       Object.entries(parentChanges).some(
         ([permission, enabled]) =>
           !Object.hasOwn(PERMISSION_DEPENDENCIES, permission) ||
@@ -155,25 +185,59 @@ export async function PUT(request, { params }) {
       );
     }
 
-    const normalizedValues = applyPermissionDependencies(values, parentChanges);
-    await prisma.$transaction(
-      PERMISSIONS.map((permission) =>
-        prisma.userPermission.upsert({
-          where: { userId_permission: { userId: user.id, permission } },
-          create: {
-            id: randomUUID(),
-            userId: user.id,
-            permission,
-            enabled: normalizedValues[permission],
-          },
-          update: { enabled: normalizedValues[permission] },
-        })
+    const normalizedValues = applyPermissionDependencies(
+      values,
+      isManager ? {} : parentChanges,
+    );
+    const permissionsToSave = isManager ? MANAGER_PERMISSIONS : PERMISSIONS;
+    if (
+      isManager &&
+      PERMISSIONS.some(
+        (permission) =>
+          !MANAGER_PERMISSIONS.includes(permission) &&
+          normalizedValues[permission] === true,
       )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Managers can only be assigned workspace and assigned-customer read permissions.",
+        },
+        { status: 400 },
+      );
+    }
+    await prisma.$transaction(
+      async (tx) => {
+        if (isManager) {
+          await tx.userPermission.updateMany({
+            where: {
+              userId: user.id,
+              permission: { notIn: MANAGER_PERMISSIONS },
+            },
+            data: { enabled: false },
+          });
+        }
+        await Promise.all(
+          permissionsToSave.map((permission) =>
+            tx.userPermission.upsert({
+              where: { userId_permission: { userId: user.id, permission } },
+              create: {
+                id: randomUUID(),
+                userId: user.id,
+                permission,
+                enabled: normalizedValues[permission],
+              },
+              update: { enabled: normalizedValues[permission] },
+            }),
+          ),
+        );
+      },
     );
     return NextResponse.json({
       success: true,
-      role: "USER",
+      role: user.role,
       permissions: normalizedValues,
+      ...(isManager ? { permissionGroups: MANAGER_PERMISSION_GROUPS } : {}),
       message: `Permissions saved for ${user.email}.`,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

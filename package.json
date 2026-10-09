@@ -14,7 +14,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "node prisma/seed.js",
-    "admin:bootstrap": "node scripts/bootstrap-admin.cjs"
+    "admin:bootstrap": "node scripts/bootstrap-admin.cjs",
+    "manager:bootstrap": "node scripts/bootstrap-manager.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

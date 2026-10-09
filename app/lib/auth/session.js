@@ -133,7 +133,12 @@ export async function authenticateAccount(email, password) {
     return null;
   }
 
-  return { id: user.id, email: user.email, name: user.name || null };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name || null,
+    role: user.role,
+  };
 }
 
 export async function createSession(user) {
@@ -162,7 +167,15 @@ export async function getAuthenticatedUser() {
     where: { tokenHash: hashToken(token) },
     select: {
       expiresAt: true,
-      user: { select: { id: true, email: true, name: true, isBlocked: true } },
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          isBlocked: true,
+          role: true,
+        },
+      },
     },
   });
   if (!session) return null;

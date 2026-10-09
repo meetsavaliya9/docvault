@@ -8,6 +8,7 @@ import AdminSignOutButton from "@/components/Admin/AdminSignOutButton";
 const navigation = [
   { label: "Dashboard", href: "/admin", icon: "dashboard" },
   { label: "Users", href: "/admin/users", icon: "users" },
+  { label: "Managers", href: "/admin/managers", icon: "users" },
   { label: "Documents", href: "/admin/documents", icon: "documents" },
   { label: "Subscriptions", href: "/admin/subscriptions", icon: "subscriptions" },
   { label: "Pricing", href: "/admin/pricing", icon: "pricing" },

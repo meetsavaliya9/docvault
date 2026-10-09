@@ -215,6 +215,7 @@ model User {
   id               String           @id
   email            String           @unique(map: "User_email_key") @db.VarChar(320)
   passwordHash     String           @db.VarChar(200)
+  role             Role             @default(USER)
   createdAt        DateTime         @default(now())
   name             String?          @db.VarChar(120)
   isBlocked        Boolean          @default(false)
@@ -227,8 +228,16 @@ model User {
   subscriptions    Subscription[]
   trashItems       TrashItem[]
   userPermissions  UserPermission[]
+  managedUsers     ManagerAssignment[] @relation("ManagerAssignments")
+  managerAssignment ManagerAssignment? @relation("AssignedManager")
 
   @@map("User")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
 }
 
 model UserPermission {
@@ -243,6 +252,18 @@ model UserPermission {
   @@unique([userId, permission], map: "UserPermission_userId_permission_key")
   @@index([permission, enabled], map: "UserPermission_permission_enabled_idx")
   @@map("userpermission")
+}
+
+model ManagerAssignment {
+  id        String   @id @db.VarChar(36)
+  managerId String
+  userId    String   @unique(map: "ManagerAssignment_userId_key")
+  createdAt DateTime @default(now())
+  manager   User     @relation("ManagerAssignments", fields: [managerId], references: [id], onDelete: Cascade, map: "ManagerAssignment_managerId_fkey")
+  user      User     @relation("AssignedManager", fields: [userId], references: [id], onDelete: Cascade, map: "ManagerAssignment_userId_fkey")
+
+  @@index([managerId], map: "ManagerAssignment_managerId_idx")
+  @@map("ManagerAssignment")
 }
 
 enum Permission {
@@ -282,6 +303,11 @@ enum Permission {
   VIEW_NOTIFICATIONS
   MANAGE_NOTIFICATIONS
   MARK_NOTIFICATION_READ
+  VIEW_USERS
+  VIEW_USER_FILES
+  VIEW_PAYMENTS
+  VIEW_SUBSCRIPTIONS
+  VIEW_REPORTS
 
   @@map("userpermission_permission")
 }

@@ -30,10 +30,11 @@ export async function PATCH(request, { params }) {
   if (
     (!updatesBlockStatus && !updatesPlan) ||
     (hasBlockStatus && !updatesBlockStatus) ||
-    (updatesPlan && (!requestedPlan || requestedPlan.length > 40))
+    (updatesPlan && (!requestedPlan || requestedPlan.length > 40)) ||
+    Object.hasOwn(body || {}, "role")
   ) {
     return NextResponse.json(
-      { error: "Provide a valid isBlocked boolean or subscription plan slug." },
+      { error: "Role changes must use the dedicated Admin Managers workflow. Provide an isBlocked boolean or subscription plan slug." },
       { status: 400 }
     );
   }
@@ -48,7 +49,7 @@ export async function PATCH(request, { params }) {
   try {
     const targetUser = await prisma.user.findUnique({
       where: { id: targetUserId },
-      select: { id: true, email: true },
+      select: { id: true, email: true, role: true },
     });
 
     if (!targetUser) {
@@ -66,7 +67,7 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    if ((updatesBlockStatus || updatesPlan) && isAdminEmail(targetUser.email)) {
+    if ((updatesBlockStatus || updatesPlan) && (isAdminEmail(targetUser.email) || targetUser.role === "ADMIN")) {
       return NextResponse.json(
         { error: "Administrator accounts cannot be modified from user management." },
         { status: 400 }
@@ -191,6 +192,12 @@ export async function DELETE(_request, { params }) {
 
     if (!user) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+    if (isAdminEmail(user.email) || user.role === "ADMIN") {
+      return NextResponse.json(
+        { error: "Administrator accounts cannot be deleted from user management." },
+        { status: 400 }
+      );
     }
 
     // Clean up Cloudinary assets
